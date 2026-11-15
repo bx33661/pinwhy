@@ -922,7 +922,8 @@ a { color: inherit; }
 .dark .nav.scrolled .nav-pill { background: color-mix(in srgb, #141416 88%, transparent); box-shadow: 0 16px 40px -18px rgba(0,0,0,.7); }
 .nav-brand { margin-right: 10px; }
 .nav-links { margin: 0 auto; padding: 3px; border-radius: 999px; }
-.nav-links a { height: 32px; display: inline-flex; align-items: center; padding: 0 14px; }
+.nav-links a { height: 32px; display: inline-flex; align-items: center; padding: 0 14px; white-space: nowrap; flex-shrink: 0; }
+  .nav-brand, .nav-right, .nav-right > * { flex-shrink: 0; white-space: nowrap; }
 .nav-links a.active { background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); }
 .nav-right { margin-left: 0; }
 .nav-cta-btn { height: 38px; padding: 0 16px; }
