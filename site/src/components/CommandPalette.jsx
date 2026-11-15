@@ -72,7 +72,7 @@ export default function CommandPalette({ open, setOpen, onNav }) {
       {
         id: 'nav', label: p.groups.nav, items: [
           { id: 'top', label: p.top, icon: ArrowUp, run: () => onNav('home')(fake), keywords: 'home top' },
-          ...t.nav.links.map(([id, label, target]) => ({ id: `nav-${id}`, label, icon: Hash, run: () => onNav(target)(fake), keywords: id })),
+          ...[...t.nav.links, ...(t.nav.anchors || [])].map(([id, label, target]) => ({ id: `nav-${id}`, label, icon: Hash, run: () => onNav(target)(fake), keywords: id })),
         ],
       },
       {
