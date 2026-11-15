@@ -64,19 +64,17 @@ export default function Hero() {
       <HeroField />
       <div className="wrap">
         {/* Eyebrow Badge */}
-        <div className="mb-6">
-          <a
-            className="hero-eyebrow"
-            href={t.hero.eyebrowHref}
-            target="_blank"
-            rel="noreferrer"
-          >
-            <span className="hero-eyebrow-dot" />
-            <span className="hero-eyebrow-tag">Pinwhy v0.2.0</span>
-            <span>{lang === 'zh' ? "安全审计模式与多宿主接入" : "Security audit mode & multi-host setup"}</span>
-            <ArrowRight size={13} className="hero-eyebrow-arrow" />
-          </a>
-        </div>
+        <a
+          className="hero-eyebrow"
+          href={t.hero.eyebrowHref}
+          target="_blank"
+          rel="noreferrer"
+        >
+          <span className="hero-eyebrow-dot" aria-hidden="true" />
+          <span className="hero-eyebrow-tag">v0.2.0</span>
+          <span>{lang === 'zh' ? "安全审计模式与多宿主接入" : "Security audit mode & multi-host setup"}</span>
+          <ArrowRight size={13} className="hero-eyebrow-arrow" aria-hidden="true" />
+        </a>
 
         {/* Multica-style Main Heading with Rotating Agent Pill */}
         <h1
