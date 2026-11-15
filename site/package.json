@@ -8,6 +8,7 @@
     "build:client": "vite build",
     "demo": "node scripts/make-demo.mjs",
     "shots": "node scripts/capture.mjs && node scripts/og.mjs",
+    "shots:dsh": "node scripts/capture-dsh.mjs",
     "preview": "vite preview --port 5190"
   },
   "dependencies": {

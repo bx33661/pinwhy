@@ -1,18 +1,32 @@
 import { Boxes, CheckCircle2, ChevronRight, Cpu, Eye, Layers, Lock, ShieldCheck, Sparkles, Terminal, Wrench, Zap } from 'lucide-react';
+import { useSiteTheme } from '@/lib/theme';
 import { useT } from '../i18n.jsx';
 import { REPO, useCopy, useCopyPrompt } from '../shared.jsx';
 
 const HIGHLIGHT_ICONS = [Eye, Wrench, ShieldCheck, Zap];
+
+function DshShot({ name, alt, caption }) {
+  const { resolved } = useSiteTheme();
+  const src = name === '3d'
+    ? '/shots/dsh-canvas-3d.webp'
+    : `/shots/dsh-canvas-${resolved === 'dark' ? 'dark' : 'light'}.webp`;
+  return (
+    <figure className="dsh-shot">
+      <img src={src} alt={alt} width={1600} height={1000} loading="lazy" decoding="async" />
+      <figcaption>{caption}</figcaption>
+    </figure>
+  );
+}
 
 export default function DshPage() {
   const t = useT();
   const D = t.dshPage;
   const copy = useCopy();
   const copyPrompt = useCopyPrompt();
+  const S = D.showcase;
 
   return (
     <div className="dsh-page">
-      {/* Hero Section */}
       <section className="pt-16 pb-12 sm:pt-20 sm:pb-16" aria-labelledby="dsh-hero-title">
         <div className="hero-paper" aria-hidden="true" />
         <div className="wrap">
@@ -44,6 +58,7 @@ export default function DshPage() {
             <button
               className="h-12 px-6 rounded-xl bg-[var(--ink)] text-[var(--bg)] font-medium text-sm inline-flex items-center gap-2.5 shadow-sm hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer"
               onClick={copyPrompt}
+              type="button"
             >
               <Sparkles size={16} />{D.cta}
             </button>
@@ -59,7 +74,20 @@ export default function DshPage() {
         </div>
       </section>
 
-      {/* Architecture Pipeline */}
+      <section className="section" aria-labelledby="dsh-showcase-title">
+        <div className="wrap">
+          <div className="head rv">
+            <div className="kicker">{S.kicker}</div>
+            <h2 className="h2" id="dsh-showcase-title">{S.title}</h2>
+            <p className="lead">{S.desc}</p>
+          </div>
+          <div className="dsh-showcase rv">
+            <DshShot name="board" alt={S.alt} caption={S.caption} />
+            <DshShot name="3d" alt={S.alt3d} caption={S.caption3d} />
+          </div>
+        </div>
+      </section>
+
       <section className="section" aria-labelledby="dsh-arch-title">
         <div className="wrap">
           <div className="head rv">
@@ -94,7 +122,6 @@ export default function DshPage() {
         </div>
       </section>
 
-      {/* 4 Feature Highlights */}
       <section className="section" aria-labelledby="dsh-feat-title">
         <div className="wrap">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-7">
@@ -124,7 +151,6 @@ export default function DshPage() {
         </div>
       </section>
 
-      {/* 3 Steps Install Section */}
       <section className="section" aria-labelledby="dsh-install-title">
         <div className="wrap">
           <div className="head rv">
@@ -147,6 +173,7 @@ export default function DshPage() {
                     <button
                       className="w-full text-left p-3.5 rounded-xl bg-[var(--surface-2)] border border-[var(--line)] font-mono text-xs text-[var(--ink)] hover:border-[var(--accent)] transition-colors flex items-center justify-between group"
                       onClick={() => copy(st.cmd, '命令已复制')}
+                      type="button"
                     >
                       <code>$ {st.cmd}</code>
                       <span className="text-[var(--muted)] group-hover:text-[var(--accent)] text-xs font-sans">点击复制</span>
