@@ -73,11 +73,12 @@ const zh = {
     frameTitle: 'Pinwhy 工作台演示（合成数据）',
     tabs: {
       context: ['现场', "查看当前关注点、相邻记录、任务目标与开放问题，了解研究进行到了哪里。"],
+      audit: ['审计卷宗', "围绕安全问题与候选发现，在论证卷宗中核对支持证据、反证、成立条件与源码位置。"],
       logic: ['逻辑', "沿已记录的支持、反驳与推导关系，查看每项判断的依据。"],
       all: ['全局', "浏览项目中的全部记录，找回其他方向与尚未建立关系的发现。"],
       board: ['2.5D 电路板', "用电路板视角浏览记录与关系。芯片高度对应已记录的严重度，连线呈现明确写入的关系。"],
     },
-    ws: { context: '现场视图', logic: '逻辑视图', all: '全局视图', fit: '适应画布', digest: '现场摘要', toDark: '切换深色主题', toLight: '切换浅色主题', locale: 'zh-CN' },
+    ws: { general: '通用', audit: '审计', auditCandidate: 'fd1', context: '现场视图', logic: '逻辑视图', all: '全局视图', fit: '适应画布', digest: '现场摘要', toDark: '切换深色主题', toLight: '切换浅色主题', locale: 'zh-CN' },
   },
   how: {
     kicker: '工作原理',
@@ -501,11 +502,12 @@ const en = {
     frameTitle: 'Pinwhy workspace demo (synthetic data)',
     tabs: {
       context: ['Context', "See the current focus, related records, goals, and open questions to understand where the work stands."],
+      audit: ['Audit dossier', "Review candidate findings alongside supporting evidence, counterevidence, necessary conditions, and source locations."],
       logic: ['Logic', "Follow recorded support, counterevidence, and derivations to review the basis for a judgment."],
       all: ['Overview', "Browse the full project record, including other directions and discoveries not yet connected."],
       board: ['2.5D board', "Browse records and relations as a circuit board. Chip height reflects recorded severity; traces show explicitly authored relations."],
     },
-    ws: { context: 'Context view', logic: 'Logic view', all: 'Overview', fit: 'Fit to screen', digest: 'Context digest', toDark: 'Switch to dark theme', toLight: 'Switch to light theme', locale: 'en' },
+    ws: { general: 'General', audit: 'Audit', auditCandidate: 'fd1', context: 'Context view', logic: 'Logic view', all: 'Overview', fit: 'Fit to screen', digest: 'Context digest', toDark: 'Switch to dark theme', toLight: 'Switch to light theme', locale: 'en' },
   },
   how: {
     kicker: 'How it works',

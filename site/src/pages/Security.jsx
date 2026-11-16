@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { Bug, CheckCircle2, FileCheck, FileCode, GitFork, Link2, Lock, Shield, ShieldAlert, Sparkles, Terminal } from 'lucide-react';
+import WorkspaceFrame, { WORKSPACE_URLS } from '../components/WorkspaceFrame.jsx';
 import { useT } from '../i18n.jsx';
 import { REPO, useCopyPrompt } from '../shared.jsx';
 
@@ -8,6 +10,7 @@ export default function SecurityPage() {
   const t = useT();
   const S = t.securityPage;
   const copyPrompt = useCopyPrompt();
+  const [live, setLive] = useState(false);
 
   return (
     <div className="security-page">
@@ -95,6 +98,21 @@ export default function SecurityPage() {
             <div className="kicker">{S.workspaceSection.kicker}</div>
             <h2 className="h2" id="workspace-title">{S.workspaceSection.title}</h2>
             <p className="lead">{S.workspaceSection.lead}</p>
+          </div>
+
+          <div className="stage-frame rv mb-8">
+            <div className="stage">
+              <div className="stage-bar">
+                <span className="dots"><i /><i /><i /></span>
+                <span className="url"><i className="lock" />localhost:4317<em>/?{WORKSPACE_URLS.audit}</em></span>
+                <span className="demo-badge">{t.stage.badge}</span>
+              </div>
+              <div className="stage-body">
+                <div className="stage-pane on">
+                  <WorkspaceFrame view="audit" live={live} onLive={() => setLive(true)} />
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

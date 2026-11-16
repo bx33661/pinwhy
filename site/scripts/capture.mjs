@@ -80,10 +80,17 @@ for (const lang of ['zh', 'en']) for (const theme of ['light', 'dark']) {
     await page.close();
   }
   // Stage stills: what the workspace window shows before the reader opens the live one.
-  for (const [view, query] of [['context', 'view=context'], ['logic', 'view=logic'], ['all', 'view=all']]) {
+  for (const [view, query, fit] of [
+    ['context', 'view=context', true],
+    ['audit', 'workspace=audit&issue=g1&candidate=fd1', false],
+    ['logic', 'view=logic', true],
+    ['all', 'view=all', true],
+  ]) {
     const page = await open(lang, theme, query);
-    await page.click(`button[aria-label="${L.fit}"]`);
-    await sleep(900);
+    if (fit) {
+      await page.click(`button[aria-label="${L.fit}"]`);
+      await sleep(900);
+    }
     await page.setViewport({ width: 1280, height: 800, deviceScaleFactor: 1.5 });
     await sleep(400);
     await page.screenshot({ path: path.join(OUT, `stage-${view}-${lang}-${theme}.webp`), type: 'webp', quality: 86 });

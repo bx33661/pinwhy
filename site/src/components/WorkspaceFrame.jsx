@@ -8,6 +8,7 @@ export const FRAME_W = 1280;
 export const FRAME_H = 800;
 export const WORKSPACE_URLS = {
   context: 'view=context',
+  audit: 'workspace=audit&issue=g1&candidate=fd1',
   logic: 'view=logic',
   all: 'view=all',
   board: 'view=context&scene=2.5d',
@@ -24,7 +25,16 @@ function prepareWorkspaceStorage(theme, locale) {
 export function pressWorkspace(frame, label) {
   const doc = frame?.contentDocument;
   if (!doc || !label) return false;
-  const btn = [...doc.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === label || b.textContent.trim() === label);
+  const btn = [...doc.querySelectorAll('button, [role="radio"]')].find((b) => b.getAttribute('aria-label') === label || b.textContent.trim() === label);
+  if (!btn) return false;
+  btn.click();
+  return true;
+}
+
+function pressAuditCandidate(frame, id) {
+  const doc = frame?.contentDocument;
+  if (!doc || !id) return false;
+  const btn = [...doc.querySelectorAll('nav button, section button')].find((b) => b.textContent.includes(`· ${id}`));
   if (!btn) return false;
   btn.click();
   return true;
@@ -32,7 +42,7 @@ export function pressWorkspace(frame, label) {
 
 /**
  * Scaled offline workspace iframe with a still until the visitor opts in.
- * @param {'context'|'logic'|'all'|'board'} view
+ * @param {'context'|'audit'|'logic'|'all'|'board'} view
  * @param {string|null} [action] optional control label to press after load (e.g. digest)
  */
 export default function WorkspaceFrame({ view = 'context', live, onLive, action = null, className = '' }) {
@@ -77,8 +87,14 @@ export default function WorkspaceFrame({ view = 'context', live, onLive, action 
     let fitTimer;
     let actionTimer;
     const timer = setTimeout(() => {
-      pressWorkspace(f, ws[view]);
-      fitTimer = setTimeout(() => pressWorkspace(f, ws.fit), 650);
+      if (view === 'audit') {
+        pressWorkspace(f, ws.audit);
+        fitTimer = setTimeout(() => pressAuditCandidate(f, ws.auditCandidate), 120);
+      } else {
+        pressWorkspace(f, ws.general);
+        setTimeout(() => pressWorkspace(f, ws[view]), 60);
+        fitTimer = setTimeout(() => pressWorkspace(f, ws.fit), 650);
+      }
       if (action) actionTimer = setTimeout(() => pressWorkspace(f, action), 900);
     }, 0);
     return () => {
@@ -89,12 +105,12 @@ export default function WorkspaceFrame({ view = 'context', live, onLive, action 
   }, [view, ready, ws, action]);
 
   const load = () => {
+    const win = frame.current?.contentWindow;
     const doc = frame.current?.contentDocument;
-    if (doc) {
-      const style = doc.createElement('style');
-      style.textContent = '::-webkit-scrollbar{width:0;height:0}';
-      doc.head.appendChild(style);
-    }
+    if (!doc || !win?.__PINWHY_DATA__) return;
+    const style = doc.createElement('style');
+    style.textContent = '::-webkit-scrollbar{width:0;height:0}';
+    doc.head.appendChild(style);
     setTimeout(() => { setReady(true); setFocus(true); }, 700);
   };
 

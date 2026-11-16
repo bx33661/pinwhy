@@ -1,13 +1,13 @@
 import { Component, Suspense, lazy, useEffect, useRef, useState } from 'react';
-import { Box, ListTree, ScanSearch, Waypoints } from 'lucide-react';
+import { Box, FileCheck2, ListTree, ScanSearch, Waypoints } from 'lucide-react';
 import { useLang } from '../i18n.jsx';
 import { reducedMotion, useInViewport } from '../shared.jsx';
 import WorkspaceFrame, { WORKSPACE_URLS } from '../components/WorkspaceFrame.jsx';
 
 const CircuitScene = lazy(() => import('../scene/CircuitScene.jsx'));
 
-const TAB_IDS = ['context', 'logic', 'all', 'board'];
-const TAB_ICON = { context: ScanSearch, logic: Waypoints, all: ListTree, board: Box };
+const TAB_IDS = ['context', 'audit', 'logic', 'all', 'board'];
+const TAB_ICON = { context: ScanSearch, audit: FileCheck2, logic: Waypoints, all: ListTree, board: Box };
 
 class SceneBoundary extends Component {
   state = { failed: false };

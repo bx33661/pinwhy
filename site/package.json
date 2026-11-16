@@ -3,9 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "node scripts/make-demo.mjs",
     "dev": "vite --host --port 5180",
+    "prebuild": "node scripts/make-demo.mjs",
     "build": "vite build && node scripts/prerender.mjs",
-    "build:client": "vite build",
+    "build:client": "node scripts/make-demo.mjs && vite build",
     "demo": "node scripts/make-demo.mjs",
     "shots": "node scripts/capture.mjs && node scripts/og.mjs",
     "shots:dsh": "node scripts/capture-dsh.mjs",
