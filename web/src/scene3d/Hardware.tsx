@@ -1,51 +1,66 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
-import { AdditiveBlending, CanvasTexture, NormalBlending, Object3D, type InstancedMesh, type MeshBasicMaterial } from 'three';
-import { GOLD, ratedSeverity, type Block } from './model';
+import { AdditiveBlending, CanvasTexture, NormalBlending, Object3D, type InstancedMesh, type MeshBasicMaterial, type MeshStandardMaterial } from 'three';
+import { ratedSeverity, type Block } from './model';
 import type { Palette } from './palette';
 
 const dummy = new Object3D();
-const PIN_PITCH = 0.36;
-const PIN_REACH = 0.1;
+const PIN_PITCH = 0.28;
+const PIN_CORNER_INSET = 0.24;
+const PIN_OFFSET = 0.052;
 /** How far heat spreads around a chip and how hot it reads, by recorded severity. Low runs cold. */
 const HEAT = { medium: { spread: 0.5, power: 0.35 }, high: { spread: 0.9, power: 0.7 }, critical: { spread: 1.4, power: 1 } };
 
-function pinsOf(block: Block): [number, number, number, boolean][] {
-  const pins: [number, number, number, boolean][] = [];
-  const across = Math.floor(block.w / PIN_PITCH), down = Math.floor(block.d / PIN_PITCH);
+function pinsOf(block: Block): [number, number][] {
+  const pins: [number, number][] = [];
+  const span = Math.max(0, block.w - PIN_CORNER_INSET * 2);
+  const across = span > 0.1 ? Math.max(2, Math.floor(span / PIN_PITCH) + 1) : 2;
+  const step = across > 1 ? Math.min(PIN_PITCH, span / (across - 1)) : 0;
   for (let i = 0; i < across; i++) {
-    const x = block.x + (i - (across - 1) / 2) * PIN_PITCH;
-    pins.push([x, block.z - block.d / 2, -1, true], [x, block.z + block.d / 2, 1, true]);
-  }
-  for (let i = 0; i < down; i++) {
-    const z = block.z + (i - (down - 1) / 2) * PIN_PITCH;
-    pins.push([block.x - block.w / 2, z, -1, false], [block.x + block.w / 2, z, 1, false]);
+    const x = block.x + (i - (across - 1) / 2) * step;
+    pins.push([x, block.z - block.d / 2 - PIN_OFFSET], [x, block.z + block.d / 2 + PIN_OFFSET]);
   }
   return pins;
 }
 
-/** Gold-plated legs along every chip's edges, printed before any chip seats; one instanced draw for the board. */
-export function Pins({ blocks, palette, faded }: { blocks: Block[]; palette: Palette; faded: boolean }) {
+/** Low-profile SMD gold pads along each chip's long horizontal edges, clear of left/right traces and severity seams. */
+export function Pins({ blocks, dark, faded, boot }: { blocks: Block[]; dark: boolean; faded: boolean; boot: { current: number } }) {
   const mesh = useRef<InstancedMesh>(null);
+  const material = useRef<MeshStandardMaterial>(null);
   const invalidate = useThree((state) => state.invalidate);
   const pins = useMemo(() => blocks.flatMap(pinsOf), [blocks]);
+  const pinOpacity = () => (faded ? 0.25 : 0.88) * Math.min(1, 0.35 + boot.current * 0.65);
+  useFrame(() => {
+    if (material.current) material.current.opacity = pinOpacity();
+  });
   useLayoutEffect(() => {
     const node = mesh.current;
     if (!node) return;
-    pins.forEach(([x, z, side, horizontal], i) => {
-      dummy.position.set(x + (horizontal ? 0 : side * PIN_REACH / 2), 0.03, z + (horizontal ? side * PIN_REACH / 2 : 0));
-      dummy.scale.set(horizontal ? 0.09 : PIN_REACH * 2, 0.04, horizontal ? PIN_REACH * 2 : 0.09);
+    pins.forEach(([x, z], i) => {
+      dummy.position.set(x, 0.005, z);
+      dummy.rotation.set(0, 0, 0);
+      dummy.scale.set(0.08, 0.008, 0.07);
       dummy.updateMatrix();
       node.setMatrixAt(i, dummy.matrix);
     });
     node.instanceMatrix.needsUpdate = true;
     node.computeBoundingSphere();
+    if (material.current) material.current.opacity = pinOpacity();
     invalidate();
-  }, [pins, invalidate]);
+  }, [pins, faded, dark, invalidate]);
   return (
     <instancedMesh key={pins.length} ref={mesh} args={[undefined, undefined, pins.length]} raycast={() => null}>
       <boxGeometry args={[1, 1, 1]} />
-      <meshStandardMaterial color={palette.css(GOLD)} metalness={1} roughness={0.32} transparent opacity={faded ? 0.25 : 1} />
+      <meshStandardMaterial
+        ref={material}
+        color={dark ? '#cfa266' : '#c89b5c'}
+        emissive="#593e18"
+        emissiveIntensity={dark ? 0.3 : 0.22}
+        metalness={0.58}
+        roughness={0.3}
+        transparent
+        opacity={pinOpacity()}
+      />
     </instancedMesh>
   );
 }
@@ -58,7 +73,7 @@ function softTexture(paint: (ctx: CanvasRenderingContext2D) => void) {
 }
 
 /** The soft dark seat under each chip, which grounds it on the board at any camera angle. */
-export function ContactShadows({ blocks, boot }: { blocks: Block[]; boot: { current: number } }) {
+export function ContactShadows({ blocks, dark, boot }: { blocks: Block[]; dark: boolean; boot: { current: number } }) {
   const mesh = useRef<InstancedMesh>(null);
   const material = useRef<MeshBasicMaterial>(null);
   const invalidate = useThree((state) => state.invalidate);
@@ -68,27 +83,28 @@ export function ContactShadows({ blocks, boot }: { blocks: Block[]; boot: { curr
     ctx.fillRect(26, 26, 76, 76);
   }), []);
   useEffect(() => () => seat.dispose(), [seat]);
-  // Faded in late: before its chip seats, a shadow is only a stain on the board.
-  useFrame(() => { if (material.current) material.current.opacity = 0.6 * Math.max(0, Math.min(1, (boot.current - 0.8) * 5)); });
+  const shadowOpacity = () => (dark ? 0.55 : 0.22) * (0.25 + 0.75 * Math.min(1, boot.current * 1.25));
+  useFrame(() => { if (material.current) material.current.opacity = shadowOpacity(); });
   useLayoutEffect(() => {
     const node = mesh.current;
     if (!node) return;
     blocks.forEach((block, i) => {
       dummy.position.set(block.x, 0.008, block.z);
       dummy.rotation.set(-Math.PI / 2, 0, 0);
-      dummy.scale.set((block.w + 0.3) * 1.68, (block.d + 0.3) * 1.68, 1);
+      dummy.scale.set((block.w + 0.3) * 1.62, (block.d + 0.3) * 1.62, 1);
       dummy.updateMatrix();
       node.setMatrixAt(i, dummy.matrix);
     });
     dummy.rotation.set(0, 0, 0);
     node.instanceMatrix.needsUpdate = true;
     node.computeBoundingSphere();
+    if (material.current) material.current.opacity = shadowOpacity();
     invalidate();
-  }, [blocks, invalidate]);
+  }, [blocks, dark, invalidate]);
   return (
     <instancedMesh key={blocks.length} ref={mesh} args={[undefined, undefined, blocks.length]} raycast={() => null}>
       <planeGeometry args={[1, 1]} />
-      <meshBasicMaterial ref={material} map={seat} transparent opacity={0.6 * Math.max(0, Math.min(1, (boot.current - 0.8) * 5))} depthWrite={false} toneMapped={false} />
+      <meshBasicMaterial ref={material} map={seat} transparent opacity={shadowOpacity()} depthWrite={false} toneMapped={false} />
     </instancedMesh>
   );
 }
@@ -112,6 +128,7 @@ export function Heat({ blocks, palette, dark, faded, boot }: { blocks: Block[]; 
     ctx.fillRect(0, 0, 128, 128);
   }), []);
   useEffect(() => () => glow.dispose(), [glow]);
+  const heatOpacity = () => (dark ? 0.42 : 0.48) * (faded ? 0.25 : 1) * (0.25 + 0.75 * Math.min(1, boot.current * 1.25));
   useLayoutEffect(() => {
     const node = mesh.current;
     if (!node) return;
@@ -129,16 +146,17 @@ export function Heat({ blocks, palette, dark, faded, boot }: { blocks: Block[]; 
     node.instanceMatrix.needsUpdate = true;
     node.computeBoundingSphere();
     if (node.instanceColor) node.instanceColor.needsUpdate = true;
+    if (material.current) material.current.opacity = heatOpacity();
     invalidate();
-  }, [spots, palette, dark, invalidate]);
+  }, [spots, palette, dark, faded, invalidate]);
   useFrame(() => {
-    if (material.current) material.current.opacity = (dark ? 0.4 : 0.5) * (faded ? 0.25 : 1) * Math.max(0, (boot.current - 0.8) * 5);
+    if (material.current) material.current.opacity = heatOpacity();
   });
   if (!spots.length) return null;
   return (
     <instancedMesh key={spots.length} ref={mesh} args={[undefined, undefined, spots.length]} raycast={() => null}>
       <planeGeometry args={[1, 1]} />
-      <meshBasicMaterial ref={material} map={glow} transparent opacity={(dark ? 0.4 : 0.5) * (faded ? 0.25 : 1) * Math.max(0, (boot.current - 0.8) * 5)} blending={dark ? AdditiveBlending : NormalBlending} depthWrite={false} toneMapped={false} />
+      <meshBasicMaterial ref={material} map={glow} transparent opacity={heatOpacity()} blending={dark ? AdditiveBlending : NormalBlending} depthWrite={false} toneMapped={false} />
     </instancedMesh>
   );
 }

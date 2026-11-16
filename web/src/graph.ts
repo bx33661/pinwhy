@@ -35,6 +35,8 @@ export type CanvasNodeData = Record<string, unknown> & {
   compact?: boolean;
   group?: boolean;
   muted?: boolean;
+  hoverMuted?: boolean;
+  hoverPeer?: boolean;
   fresh?: boolean;
   auditRoles?: AuditNodeRole[];
   auditCounts?: { contradiction: number; condition: number };
@@ -371,21 +373,22 @@ export function formatTime(value?: number) {
 export function layoutOverview(nodes: CanvasNode[], edges: Edge[], overviewColumns: 1 | 2 = 2) {
   const connected = new Set(edges.flatMap((edge) => [edge.source, edge.target]));
   const groups = BOARD_GROUPS.map((group) => ({ ...group, nodes: nodes.filter((node) => groupFor(node.data.item, connected) === group.id) })).filter((group) => group.nodes.length);
-  const W = 240, H = 112, gap = 22, pad = 28, top = 90;
+  const W = 240, H = 112, colGap = 22, rowGap = 30, pad = 28, top = 90;
   const frames: CanvasNode[] = [], children: CanvasNode[] = [];
   const columns = [0, 0];
   const groupColumns = (size: number) => Math.min(4, Math.max(2, Math.ceil(Math.sqrt(size))));
   const widths = [0, 0];
-  groups.forEach((group, i) => { const count = groupColumns(group.nodes.length); widths[i % overviewColumns] = Math.max(widths[i % overviewColumns], pad * 2 + count * W + (count - 1) * gap); });
+  groups.forEach((group, i) => { const count = groupColumns(group.nodes.length); widths[i % overviewColumns] = Math.max(widths[i % overviewColumns], pad * 2 + count * W + (count - 1) * colGap); });
   for (const [index, group] of groups.entries()) {
     const col = index % overviewColumns;
     const count = groupColumns(group.nodes.length);
     const width = widths[col];
-    const height = top + Math.ceil(group.nodes.length / count) * (H + gap) - gap + pad;
+    const rows = Math.ceil(group.nodes.length / count);
+    const height = top + rows * H + (rows - 1) * rowGap + pad;
     const id = `__display_group_${group.id}`;
     frames.push({ id, type: 'boardGroup', position: { x: col ? widths[0] + 56 : 0, y: columns[col] }, width, height, initialWidth: width, initialHeight: height, style: { width, height }, draggable: false, selectable: false, focusable: false,
       data: { item: { id, type: 'display-group', title: group.title }, current: false, dimmed: false, degree: 0, group: true, groupCount: group.nodes.length, groupSubtitle: group.subtitle, groupColor: group.color }, zIndex: -1 });
-    group.nodes.forEach((node, i) => children.push({ ...node, parentId: id, extent: 'parent', position: { x: pad + (i % count) * (W + gap), y: top + Math.floor(i / count) * (H + gap) }, width: W, height: H, initialWidth: W, initialHeight: H, style: { width: W, height: H }, data: { ...node.data, compact: true, direction: 'RIGHT' } }));
+    group.nodes.forEach((node, i) => children.push({ ...node, parentId: id, extent: 'parent', position: { x: pad + (i % count) * (W + colGap), y: top + Math.floor(i / count) * (H + rowGap) }, width: W, height: H, initialWidth: W, initialHeight: H, style: { width: W, height: H }, data: { ...node.data, compact: true, direction: 'RIGHT' } }));
     columns[col] += height + 56;
   }
   return { nodes: [...frames, ...children], edges };

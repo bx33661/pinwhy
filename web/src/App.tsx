@@ -1,7 +1,8 @@
-import { Suspense, lazy, useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { Background, BackgroundVariant, MiniMap, ReactFlow, ReactFlowProvider } from '@xyflow/react';
 import { History } from 'lucide-react';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
 import { BoardGroup } from './BoardGroup';
 import { BrandMark } from './BrandMark';
 import { SecurityNode } from './SecurityNode';
@@ -33,12 +34,14 @@ import { useWorkspaceScene } from './workspace/use-workspace-scene';
 import { useWorkspaceTimeline } from './workspace/use-workspace-timeline';
 import { useWorkspaceChrome, useWorkspaceShortcuts } from './workspace/use-workspace-chrome';
 import { useEmbedHost } from './workspace/use-embed-host';
-import { AuditNavigation } from './panels/AuditNavigation';
-import { AuditContext } from './panels/AuditContext';
+import { AuditCatalog, AuditDossier } from './workspace/shells/audit';
 import { isAuditIssue } from './workspace/audit';
 import type { BoardNode } from './types';
 import type { Scene3DProps } from './scene3d/shared';
 import { readPresentation } from './embedded';
+import { usePref } from './use-pref';
+
+const KNOWN_NODE_TYPES = new Set(['start', 'goal', 'intent', 'hypothesis', 'question', 'fact', 'observation', 'action', 'result', 'finding', 'vuln', 'hint', 'summary', 'note']);
 
 const nodeTypes = { security: SecurityNode, boardGroup: BoardGroup };
 const edgeTypes = { routed: RoutedEdge };
@@ -60,18 +63,23 @@ function Workspace() {
   const snapshot = timeline.snapshot;
   const [timelineOpen, setTimelineOpen] = useState(() => Boolean(asOf) && !isStatic);
   const {
-    theme, setTheme, direction, setDirection, sidebarOpen, setSidebarOpen, closeSidebar,
+    theme, setTheme, cardTheme, setCardTheme, direction, setDirection, sidebarOpen, setSidebarOpen, closeSidebar,
     showMap, setShowMap, showLegend, setShowLegend, edgeStyle, setEdgeStyle, follow, setFollow,
     showChanges, setShowChanges, paletteOpen, setPaletteOpen, digestOpen, setDigestOpen,
     newOpen, setNewOpen, shortcutsOpen, setShortcutsOpen, setFonts: setHostFonts,
   } = useWorkspaceChrome({ embedded: presentation.embedded, appearance: presentation.appearance, fonts: presentation.fonts });
   const [filter, setFilter] = useState<NodeFilter>(EMPTY_FILTER);
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const [auditGraphOpen, setAuditGraphOpen] = usePref('audit-graph', false);
+  const [auditSplit, setAuditSplit] = usePref('audit-split', 54);
+  const clampSplit = (value: number) => Math.max(28, Math.min(76, Math.round(value)));
   const digestTrigger = useRef<HTMLButtonElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const flatRef = useRef<HTMLDivElement>(null);
   const inspectorRef = useRef<HTMLElement>(null);
 
   const auditMode = workspace === 'audit';
+  const showAuditGraph = auditMode && auditGraphOpen;
   const canvasMode = auditMode ? 'logic' : mode;
   const { board, agent, audit, expandAudit, projection, results, legend } = useWorkspaceData(snapshot, mode, agentId, filter, auditMode ? { issueId, candidateId, selectedId: selectedId ?? deepLink.current } : undefined);
   const { allNodes, allEdges, activities, byId, inbox, paletteNodes, filterOptions, counts } = board;
@@ -79,7 +87,7 @@ function Workspace() {
   // Stepping through checkpoints is not the Agent writing: only the live board pulses.
   const { fresh, notice, flash, linkCopied, copyNodeLink, copied, copyDigest, offlineShown } = useWorkspaceFeedback(timeline.active ? null : snapshot, allNodes, digest, agentId, connection, isStatic);
   const { nodes, edges, onNodesChange, layoutRevision, layoutMode, laying } = useWorkspaceLayout(projection, canvasMode, direction);
-  const { centerOnNode, motion } = useWorkspaceViewport({ viewportRef, pendingFocus, layoutRevision, mode: canvasMode, follow: follow && !auditMode, currentId, selectedId });
+  const { centerOnNode, fitCanvas, motion } = useWorkspaceViewport({ viewportRef, pendingFocus, layoutRevision, mode: canvasMode, follow: follow && !auditMode, currentId, selectedId });
   const { scene3d, sceneRef, openScene, closeScene, occlusion, exporting, exportImage } = useWorkspaceScene({ viewportRef, flatRef, inspectorRef, selectedId, mode: canvasMode, flash, enabled: !auditMode });
   // Resolve selection against the requested checkpoint, never its loading fallback.
   const { selected, focusNode, clearSelection, switchMode, handleNodesChange, onNodeClick } = useWorkspaceSelection({
@@ -106,9 +114,30 @@ function Workspace() {
       }
     },
   });
-  const { highlighted, displayNodes, displayEdges } = useWorkspacePresentation(nodes, edges, selectedId, fresh, canvasMode, edgeStyle, showChanges && timeline.active ? timeline.changeMap : null);
+  const activeHoverId = hoveredNodeId && byId.has(hoveredNodeId) ? hoveredNodeId : null;
+  const { highlighted, displayNodes, displayEdges } = useWorkspacePresentation(
+    nodes,
+    edges,
+    selectedId,
+    fresh,
+    canvasMode,
+    edgeStyle,
+    showChanges && timeline.active ? timeline.changeMap : null,
+    activeHoverId,
+  );
+  useEffect(() => { setHoveredNodeId(null); }, [workspace, canvasMode]);
+  const hidden = projection?.hidden || 0;
+  const visibleIds = useMemo(
+    () => (hidden > 0 ? new Set((projection?.nodes || []).map((node) => node.id)) : undefined),
+    [hidden, projection],
+  );
 
-  useWorkspaceShortcuts(clearSelection, setPaletteOpen, setShortcutsOpen, setSidebarOpen);
+  useWorkspaceShortcuts(clearSelection, setPaletteOpen, setShortcutsOpen, setSidebarOpen, {
+    enabled: Boolean(snapshot) && !scene3d && (!auditMode || showAuditGraph),
+    onFit: fitCanvas,
+    onLocate: !auditMode && currentId ? () => focusNode(currentId) : undefined,
+    onToggleMap: () => setShowMap((open) => !open),
+  });
   const openAuditArgument = (node: BoardNode) => {
     navigateWorkspace(isAuditIssue(node) ? { issueId: node.id, candidateId: null, node: node.id } : { candidateId: node.id, node: node.id });
     focusNode(node.id);
@@ -125,6 +154,13 @@ function Workspace() {
     pendingFocus.current = id ?? issueId;
   };
 
+  // A single authored issue should open immediately so the dossier is not an empty shell.
+  useEffect(() => {
+    if (!auditMode || !audit || issueId || candidateId || audit.issues.length !== 1) return;
+    const sole = audit.issues[0];
+    navigateWorkspace({ issueId: sole.id, candidateId: null, node: sole.id });
+    pendingFocus.current = sole.id;
+  }, [auditMode, audit, issueId, candidateId]);
 
   if (!snapshot) {
     return (
@@ -140,7 +176,6 @@ function Workspace() {
   const writable = !isStatic && !timeline.active && snapshot.meta.writable === true;
   const pastPoint = snapshot.meta.asOf;
   const stats = snapshot.stats || {};
-  const hidden = projection?.hidden || 0;
 
   return (
     <div className="flex h-full flex-col">
@@ -183,13 +218,15 @@ function Workspace() {
           <>
             <button className="absolute inset-0 z-20 bg-black/20 lg:hidden" aria-label={t('app.closeNav')} onClick={() => setSidebarOpen(false)} />
             <aside className="z-30 w-64 shrink-0 border-r bg-background max-lg:absolute max-lg:inset-y-0 max-lg:left-0 max-lg:shadow-float">
-              {audit ? <AuditNavigation audit={audit} selectedId={selectedId} onSelect={focusNode} onIssue={chooseIssue} onCandidate={chooseCandidate} onCandidateIssue={(id) => navigateWorkspace({ issueId: id })} onOpenArgument={openAuditArgument} onExpand={expandAudit} onSearch={() => { setPaletteOpen(true); closeSidebar(); }} /> :
+              {audit ? <AuditCatalog audit={audit} selectedId={selectedId} onSelect={focusNode} onIssue={chooseIssue} onCandidate={chooseCandidate} onCandidateIssue={(id) => navigateWorkspace({ issueId: id })} onOpenArgument={openAuditArgument} onExpand={expandAudit} onSearch={() => { setPaletteOpen(true); closeSidebar(); }} /> :
               <Sidebar
                 current={current}
+                goals={agent.goals}
                 openItems={openItems}
                 findings={findings}
                 inbox={inbox}
                 selectedId={selectedId}
+                visibleIds={visibleIds}
                 counts={counts}
                 onSelect={focusNode}
                 onSearch={() => { setPaletteOpen(true); if (window.innerWidth < 1024) setSidebarOpen(false); }}
@@ -203,10 +240,67 @@ function Workspace() {
           </>
         )}
 
-        <main ref={viewportRef} className="relative flex min-w-0 flex-1 flex-col" aria-label={t('app.canvas')}>
-          {audit && <AuditContext audit={audit} selected={selected} onNavigate={() => setSidebarOpen(true)} onSelect={focusNode} onOpenArgument={openAuditArgument} onExpand={expandAudit} />}
-          <div className="relative min-h-0 flex-1">
-          <div ref={flatRef} className="absolute inset-0" inert={scene3d} aria-hidden={scene3d}>
+        <main ref={viewportRef} className="relative flex min-w-0 flex-1 flex-col" aria-label={auditMode ? t('audit.dossier') : t('app.canvas')}>
+          <div className="relative flex min-h-0 flex-1 flex-col">
+          {audit && (
+            <div
+              className={cn('min-h-0', showAuditGraph ? 'shrink-0 border-b' : 'flex-1')}
+              style={showAuditGraph ? { height: `${clampSplit(auditSplit)}%` } : undefined}
+            >
+              <AuditDossier
+                audit={audit}
+                selected={selected}
+                graphOpen={auditGraphOpen}
+                onToggleGraph={() => setAuditGraphOpen((open) => !open)}
+                onSelect={focusNode}
+                onIssue={chooseIssue}
+                onCandidate={chooseCandidate}
+                onOpenArgument={openAuditArgument}
+                onExpand={expandAudit}
+              />
+            </div>
+          )}
+          {showAuditGraph && (
+            <div
+              role="separator"
+              aria-orientation="horizontal"
+              aria-label={t('audit.resizeSplit')}
+              aria-valuemin={28}
+              aria-valuemax={76}
+              aria-valuenow={clampSplit(auditSplit)}
+              tabIndex={0}
+              onKeyDown={(event) => {
+                if (event.key === 'ArrowUp') { event.preventDefault(); setAuditSplit((value) => clampSplit(value - 4)); }
+                if (event.key === 'ArrowDown') { event.preventDefault(); setAuditSplit((value) => clampSplit(value + 4)); }
+              }}
+              onPointerDown={(event) => {
+                const container = event.currentTarget.parentElement;
+                if (!container) return;
+                event.preventDefault();
+                event.currentTarget.setPointerCapture(event.pointerId);
+                const startY = event.clientY;
+                const startSplit = clampSplit(auditSplit);
+                const totalHeight = Math.max(160, container.getBoundingClientRect().height);
+                const onMove = (moveEvent: PointerEvent) => {
+                  const pct = startSplit + ((moveEvent.clientY - startY) / totalHeight) * 100;
+                  setAuditSplit(clampSplit(pct));
+                };
+                const onUp = () => {
+                  window.removeEventListener('pointermove', onMove);
+                  window.removeEventListener('pointerup', onUp);
+                  window.removeEventListener('pointercancel', onUp);
+                };
+                window.addEventListener('pointermove', onMove);
+                window.addEventListener('pointerup', onUp);
+                window.addEventListener('pointercancel', onUp);
+              }}
+              className="group relative z-10 flex h-1.5 shrink-0 cursor-row-resize items-center justify-center border-b bg-background/80 transition-colors hover:bg-accent"
+            >
+              <span className="h-0.5 w-10 rounded-full bg-border transition-colors group-hover:bg-strong" />
+            </div>
+          )}
+          {(!auditMode || showAuditGraph) && (
+          <div ref={flatRef} className={cn('relative min-h-0', auditMode ? 'flex-1' : 'absolute inset-0')} inert={scene3d} aria-hidden={scene3d}>
           <ReactFlow
             nodes={displayNodes}
             edges={displayEdges}
@@ -219,10 +313,11 @@ function Workspace() {
               if (audit && (detail === 'contradiction' || detail === 'condition')) {
                 const context = audit.contexts.get(node.id);
                 if (context && !context.pages[detail].open) expandAudit(context.pages[detail].key, 'more', 0);
-                setSidebarOpen(true);
               }
             }}
             onPaneClick={clearSelection}
+            onNodeMouseEnter={(_event, node) => { if (!node.data.group) setHoveredNodeId(node.id); }}
+            onNodeMouseLeave={(_event, node) => { setHoveredNodeId((prev) => (prev === node.id ? null : prev)); }}
             nodesConnectable={false}
             deleteKeyCode={null}
             autoPanOnNodeFocus={false}
@@ -254,6 +349,8 @@ function Workspace() {
               onToggleLegend={() => setShowLegend((open) => !open)}
               edgeStyle={edgeStyle}
               onEdgeStyle={setEdgeStyle}
+              cardTheme={cardTheme}
+              onCardTheme={setCardTheme}
               onScene3d={auditMode ? undefined : openScene}
             />
             {showMap && (
@@ -262,15 +359,30 @@ function Workspace() {
                 style={{ marginBottom: 64 }}
                 pannable
                 zoomable
-                nodeStrokeWidth={2}
-                nodeColor={(node) => (node.data as CanvasNode['data']).group ? 'transparent' : 'var(--ink-3)'}
-                nodeStrokeColor={(node) => (node.data as CanvasNode['data']).group ? 'var(--line-strong)' : 'transparent'}
+                nodeBorderRadius={4}
+                nodeStrokeWidth={3}
+                nodeColor={(node) => {
+                  const d = node.data as CanvasNode['data'];
+                  if (d.group) return 'transparent';
+                  if (d.current) return 'var(--live)';
+                  if (['dead', 'refuted', 'superseded'].includes(d.item?.status || '')) return 'var(--line-strong)';
+                  if (d.item?.severity === 'critical' || d.item?.severity === 'high') return 'var(--danger)';
+                  return KNOWN_NODE_TYPES.has(d.item?.type) ? `var(--node-${d.item.type})` : 'var(--ink-3)';
+                }}
+                nodeStrokeColor={(node) => {
+                  const d = node.data as CanvasNode['data'];
+                  if (d.group) return 'var(--line-strong)';
+                  if (node.id === selectedId) return 'var(--ink)';
+                  if (d.current) return 'var(--live)';
+                  return 'transparent';
+                }}
               />
             )}
           </ReactFlow>
           </div>
+          )}
 
-          {scene3d && (
+          {!auditMode && scene3d && (
             <Suspense fallback={<div role="status" className="absolute inset-0 z-[5] flex items-center justify-center bg-background text-xs text-muted-foreground">{t('scene3d.loading')}</div>}>
               <Scene3D
                 ref={sceneRef}
@@ -278,27 +390,33 @@ function Workspace() {
                 edges={edges}
                 mode={canvasMode}
                 layoutMode={layoutMode}
+                direction={direction}
                 theme={theme}
                 selectedId={selectedId}
                 highlighted={highlighted}
                 currentId={currentId}
+                canFollow={!isStatic && !auditMode}
                 follow={follow && !isStatic}
+                showLegend={showLegend}
                 fresh={fresh}
                 motion={motion > 0}
                 occlusion={occlusion}
                 exporting={exporting}
                 onExport={exportImage}
-                onSelect={(id) => id ? setSelectedId(id) : clearSelection()}
+                onDirection={() => setDirection(direction === 'RIGHT' ? 'DOWN' : 'RIGHT')}
+                onToggleFollow={() => setFollow((value) => !value)}
+                onToggleLegend={() => setShowLegend((open) => !open)}
+                onSelect={(id) => id ? focusNode(id) : clearSelection()}
                 onExit={closeScene}
                 onNotice={flash}
               />
             </Suspense>
           )}
 
-          {showLegend && nodes.length > 0 && <Legend types={legend.types} groups={legend.groups} onClose={() => setShowLegend(false)} />}
+          {!auditMode && showLegend && nodes.length > 0 && <Legend types={legend.types} groups={legend.groups} onClose={() => setShowLegend(false)} />}
 
-          {projection && projection.nodes.length === 0 && (!auditMode || allNodes.length === 0) && (
-            <EmptyBoard viewEmpty={!auditMode && allNodes.length > 0} isStatic={isStatic} onShowAll={() => switchMode('all')} />
+          {!auditMode && projection && projection.nodes.length === 0 && (
+            <EmptyBoard viewEmpty={allNodes.length > 0} isStatic={isStatic} onShowAll={() => switchMode('all')} />
           )}
 
           <div className="pointer-events-none absolute left-1/2 top-3 z-10 flex -translate-x-1/2 flex-col items-center gap-2">
@@ -365,10 +483,12 @@ function Workspace() {
         onOpenChange={setPaletteOpen}
         nodes={paletteNodes}
         theme={theme}
+        cardTheme={cardTheme}
         copied={copied}
         onSelect={focusNode}
         onMode={auditMode ? undefined : switchMode}
         onTheme={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+        onCardTheme={setCardTheme}
         onCopyDigest={copyDigest}
         onExport={projection?.nodes.length && nodes.length > 0 && !exporting ? exportImage : null}
         onShortcuts={() => setShortcutsOpen(true)}

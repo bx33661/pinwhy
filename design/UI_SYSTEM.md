@@ -21,15 +21,26 @@ Quiet tool chrome for exploration. General and security-audit modes are two read
   an update is available. It checks the official main package version only when
   clicked. Offline snapshots show a notice and make no update request.
 - **Sidebar (256px, collapsible; overlay below 1024px)**: outline of the board —
-  current position, open items, findings, unconnected records — plus counts.
-  Rows show recorded status, severity and confidence independently; footer counts wrap
-  between labels without splitting a label.
-- **Canvas**: full-bleed React Flow. One floating toolbar (bottom-left) holds
-  fit / locate current / layout direction / minimap / zoom. At narrow widths the zoom
-  controls wrap together onto another row, keeping every button visible.
-- **Inspector**: floats over the canvas right edge (bottom sheet on phones), so
-  selecting a node never resizes or re-lays-out the canvas.
-- **⌘K command palette** (cmdk): jump to any node, switch view/theme, copy digest.
+  current position, active goals, open items, findings, unconnected records — plus counts.
+  Rows show recorded status, severity and confidence independently, mark items absent from a
+  filtered canvas view subtly, and footer counts wrap between labels without splitting a label.
+- **Canvas**: full-bleed React Flow. Overview trays use tinted solid frames with unclipped
+  floating capsule headers; retired statuses (`dead`, `refuted`, `superseded`) render with
+  dashed borders and muted strike-through headings. Hovering or selecting a node softly dims
+  non-adjacent cards, illuminates 1-hop edges with directional flow cues and origin dots plus
+  pill relation labels without changing selection or URL state, and detail zoom surfaces
+  recorded source locations at card footers. One grouped floating toolbar (bottom-left) holds
+  framing (`F`/`C`), layout & expression (`M` minimap with semantic node colors, selectable
+  node card style across `clean`, `aura`, `mono`, `morandi`, and `classic`), export, `2.5D`,
+  and zoom controls. At narrow widths the zoom controls wrap together onto another row,
+  keeping every button visible.
+- **Inspector**: floats over the canvas right edge with a draggable desktop width handle
+  (`340–560px`, persisted locally; bottom sheet on phones), so selecting a node never resizes
+  or re-lays-out the canvas. Metadata sits in a compact orthogonal grid, node IDs and source
+  locations offer one-click copy feedback, inline backtick code spans in detail text render as
+  subtle monospace chips, relations group by direction with tinted family pills, and writable
+  add/connect forms use progressive disclosure with a visual node-type picker popover.
+- **⌘K command palette** (cmdk): jump to any node, switch view/theme/card style, copy digest.
   Search no longer dims the canvas; it navigates.
 - **Host embedding**: framed workspaces use one compact toolbar and the host's validated language,
   colour scheme, text/code font families and sizes without persisting those settings locally.
@@ -40,7 +51,7 @@ Quiet tool chrome for exploration. General and security-audit modes are two read
 ## Workspace modes
 
 - A top-level General / Security audit selector is separate from the general Context / Logic / Global view switch. General remains the default. Reader mode, issue, candidate, selected node, Agent and checkpoint are navigation state, never board events.
-- General retains its canvas, 2.5D sandbox and existing controls. Security audit starts with recorded questions/goals and their explicitly associated candidates, then presents a local argument graph. Opening evidence does not silently replace the chosen issue or candidate.
+- General retains its canvas, 2.5D sandbox and existing controls. Security audit is a dedicated reading shell over the same board: a catalog of recorded questions/goals and candidates, plus an argument dossier (claim, support, counterevidence, required conditions) with role accents, semantic relation pills, and collapsible groups. When the optional local argument graph is opened below the dossier, a horizontal splitter resizes the vertical share cleanly (`28–76%`). Opening evidence does not silently replace the chosen issue or candidate.
 - Audit support, counterevidence, necessary conditions and related records are separate reading groups. Relation direction and authored explanation remain visible; a weak association or a failed experiment is not automatically counterevidence. Unknown relation kinds and unassigned/custom records stay reachable.
 - Shared evidence and conditions keep one node identity. Show their other references as navigation rather than copying records. Do not infer issue membership, source versions, AND/OR conditions or verdicts from prose or graph reachability.
 - Both modes use the same Inspector, explicit editing, conflict drafts, search, live snapshot and checkpoint history. Checkpoint and offline views are read-only; changing modes preserves that boundary. Audit content is included in the main bundle so standalone HTML can render it without a server.
@@ -114,53 +125,57 @@ is compiled by `@tailwindcss/vite`.
   canvas does not load that stack. If the chunk or WebGL fails (offline HTML export, blocked GPU or a lost
   context), a notice appears and the board returns to the flat canvas. The choice persists (`scene3d`
   pref). The covered flat canvas is inert; entering focuses the 3D toolbar and exiting restores focus.
-- The board is a finished circuit board: a lacquered slab with a printed border and plated mounting
-  holes, floating over a plain stage and lit by a small painted environment (no image is fetched).
-  Chip positions are the ELK layout, unstretched, so routes end exactly on chip edges. Height encodes
-  recorded severity only: critical > high > medium > unknown authored levels > low > unset. High and
-  critical chips carry a seam of light at the base; medium and worse bleed heat onto the board. The
-  package stays neutral (`model.ts`, `board-material.ts`, `BoardMesh.tsx`, `Hardware.tsx`).
+- The board is a finished dual-layer circuit board: a lacquered solder-mask slab with a chamfered
+  substrate edge, printed border and drilled plated mounting holes, floating over a plain stage and
+  lit by a painted softbox environment (no image is fetched). Chip positions match the ELK layout,
+  unstretched, so routes terminate cleanly in via pads at chip edges. Low-profile SMD gold pads sit
+  recessed along each chip's long horizontal edges without touching traces or base severity seams.
+  Height encodes recorded severity only: critical > high > medium > unknown authored levels > low >
+  unset. Medium, high and critical chips carry a severity collar at the base and bleed heat onto the
+  board. The package stays neutral (`model.ts`, `board-material.ts`, `BoardMesh.tsx`, `Hardware.tsx`).
 - Relations are copper traces along ELK's route, with corners cut at 45°; without a usable route a
-  trace runs at right angles between the facing chip edges. All traces are one mesh: signals run in
-  each relation's recorded direction inside the shader. Solid arrowheads keep that direction readable
-  with motion disabled and in PNGs; reversed layouts still point to the recorded destination. 反驳 is
-  dashed, 取代 dotted. Selected relations are named in the sharp canvas label layer. Which relations
-  are drawn follows the flat canvas rules.
-- Card faces are canvas textures drawn with the system font (CJK without bundled fonts): type,
-  status, severity badge, headline and supporting sentence, coloured from the same CSS tokens.
-  From afar a floating headline stands in for the face at a constant screen size; it steps aside once
-  the card is past the flat canvas's overview zoom (`detailLevel`). At a distance only goals, rated
-  chips, the selection, the current position and the hovered chip are named, and labels never overlap.
-  They are drawn after post-processing, so tilt-shift never blurs them.
+  trace runs at right angles between the facing chip edges. All traces are batched with via pads at
+  their ends: signals run in each relation's recorded direction inside the shader. Solid arrowheads
+  keep that direction readable with motion disabled and in PNGs; reversed layouts still point to the
+  recorded destination. 反驳 is dashed, 取代 dotted. Hovering or selecting a chip lifts it, adds a
+  rounded perimeter halo, reveals and lights its 1-hop traces (including in the global overview) and
+  displays selected/hovered relation captions in the sharp label layer.
+- Card faces are canvas textures drawn with the system font and word-aware CJK/Latin wrapping: kind
+  dot and label, recorded status, confidence and severity, headline and supporting sentence, coloured
+  from the same CSS tokens. Only when zoomed far out does a floating headline stand in for the face
+  at a constant screen size; at readable zoom the pill steps aside so card lids remain unobstructed.
+  Labels never overlap and are drawn after post-processing.
 - The current position is a hovering green gem with a light cone and ripples on its chip; a sweep
   runs outwards over the pads from it.
 - Selecting a chip flies the camera to it, outlines it, mutes everything outside the
-  one-hop neighbourhood and opens the Inspector; follow mode flies to the Agent's cursor. Clearing
-  the selection flies back to the whole board, unless the reader has dragged or zoomed the camera since.
-  Framing waits for the requested view's layout; selection and follow wait for their chip's coordinates.
-  A measured Inspector reserves space on the right or, on narrow screens, at the bottom; focus and
-  whole-board framing use the remaining viewport. The toolbar rises above a bottom drawer.
-  Idle orbit is off by default and remembers the reader's choice (`scene3d-orbit` pref).
-- Past 40 drawn relations traces dim and only every third carries a signal until a selection names
-  the ones that matter.
+  one-hop neighbourhood and opens the Inspector; follow mode flies to the Agent's cursor; arrow keys
+  traverse along explicit 1-hop edges. Clearing the selection flies back to the whole board, unless
+  the reader has dragged or zoomed the camera since. Framing waits for the requested view's layout;
+  selection and follow wait for their chip's coordinates. A measured Inspector reserves space on the
+  right or, on narrow screens, at the bottom; focus and whole-board framing use the remaining viewport.
+  The toolbar rises above a bottom drawer and offers framing, isometric/overhead camera presets
+  (`scene3d-camera` pref), locate current node, follow Agent, layout direction, legend toggle, idle
+  orbit (`scene3d-orbit` pref) and PNG export.
+- Past 40 drawn relations traces dim and only every third carries a signal until a hover or selection
+  names the ones that matter.
 - Stream ticks stay cheap: traces and hardware rebuild only when `shapeKey`/`tracesKey` change, and
   card faces and labels redraw per card when `cardKey` changes.
-- A view opens with a power-on: current spreads from the goals along recorded relations (`bootDepths`)
-  and each chip seats and flashes as it arrives, while the camera dives in. `homeFrame` places the
-  camera so every corner of the board's box fits the frame, centred; fog follows that distance. A
-  chip-height legend sits bottom-right while nothing is selected.
-- Dark: glowing pads, bloom, light film grain, tilt-shift at the frame's far edges, vignette; severe
-  seams breathe. Light: pale ceramic on a grey stage, no bloom.
-  `PerformanceMonitor` lowers DPR relative to the device's initial resolution, so a downgrade never
-  raises it. MSAA, shadow-map size, bloom, tilt-shift and grain drop with the quality level; low quality
-  keeps a lightweight base pass and the sharp labels.
-  Shaders must never output NaN: bloom spreads one bad pixel across the whole frame.
+- A view opens with a quick wall-clock power-on (`1.1s`): current spreads from the goals along
+  recorded relations (`bootDepths`) and each chip rises smoothly from a seated silhouette as it
+  arrives, while the camera dives in. `homeFrame` places the camera so every corner of the board's
+  box fits the frame, centred; fog follows that distance. A stepped chip-height legend sits
+  bottom-right while nothing is selected.
+- Dark: deep obsidian-emerald mask, glowing pads, subtle stage particles, crisp bloom and light film
+  grain, gentle vignette (no tilt-shift blur); severe seams breathe. Light: bright ceramic white on a
+  clean light-grey studio stage, no bloom. `PerformanceMonitor` lowers DPR relative to the device's
+  initial resolution, so a downgrade never raises it. MSAA, shadow-map size, bloom and grain drop
+  with the quality level; low quality keeps a lightweight base pass and the sharp labels. Shaders must
+  never output NaN: bloom spreads one bad pixel across the whole frame.
 - Reduced motion disables the power-on, intro dive, idle orbit, flights, signals, sweep, breathing and
-  flashes on incoming edits. Chips waiting for power-on cannot be picked. With motion disabled the
-  canvas renders on demand: camera interaction, selection, theme and stream changes request a frame,
-  then drawing stops again.
+  flashes on incoming edits. With motion disabled the canvas renders on demand: camera interaction,
+  hover, selection, theme and stream changes request a frame, then drawing stops again.
 - Both the toolbar and command palette export the currently visible renderer. A 3D PNG includes
-  static arrowheads and selected relation names. No dragging or editing in this view.
+  static arrowheads and active relation names. No dragging or editing in this view.
 
 ## Theme
 

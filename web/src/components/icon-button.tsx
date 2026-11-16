@@ -9,7 +9,7 @@ export function IconButton({ label, shortcut, children, size = 'icon-sm', ...pro
       <TooltipTrigger asChild>
         <Button size={size} aria-label={label} {...props}>{children}</Button>
       </TooltipTrigger>
-      <TooltipContent>{label}{shortcut && <span className="opacity-60">{shortcut}</span>}</TooltipContent>
+      <TooltipContent>{label}{shortcut && <span className="rounded bg-background/15 px-1 font-mono text-[10px] leading-4 opacity-85">{shortcut}</span>}</TooltipContent>
     </Tooltip>
   );
 }

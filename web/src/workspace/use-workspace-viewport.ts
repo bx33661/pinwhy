@@ -82,5 +82,9 @@ export function useWorkspaceViewport({ viewportRef, pendingFocus, layoutRevision
     return () => cancelAnimationFrame(frame);
   }, [currentId, follow, mode, centerOnNode]);
 
-  return { centerOnNode, motion };
+  const fitCanvas = useCallback(() => {
+    fitView({ padding: .14, duration: motion });
+  }, [fitView, motion]);
+
+  return { centerOnNode, fitCanvas, motion };
 }

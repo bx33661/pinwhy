@@ -16,7 +16,7 @@ globalThis.crypto ??= webcrypto;
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pinwhy-presenter-'));
 after(() => fs.rmSync(dir, { recursive: true, force: true }));
 const root = fileURLToPath(new URL('../', import.meta.url));
-execFileSync(process.execPath, [path.join(root, 'node_modules/typescript/bin/tsc'), '--target', 'ES2022', '--module', 'ESNext', '--moduleResolution', 'Bundler', '--skipLibCheck', '--outDir', dir, path.join(root, 'web/src/presentation.ts'), path.join(root, 'web/src/api.ts'), path.join(root, 'web/src/workspace/selectors.ts')], { cwd: dir });
+execFileSync(process.execPath, [path.join(root, 'node_modules/typescript/bin/tsc'), '--target', 'ES2022', '--module', 'ESNext', '--moduleResolution', 'Bundler', '--skipLibCheck', '--outDir', dir, path.join(root, 'web/src/presentation.ts'), path.join(root, 'web/src/api.ts'), path.join(root, 'web/src/workspace/selectors.ts'), path.join(root, 'web/src/card-themes.ts')], { cwd: dir });
 function resolveModuleExtensions(directory) {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     const p = path.join(directory, entry.name);
@@ -31,6 +31,7 @@ const { confidenceLabel, presentNode, nodeStateSummary, matchesNode, statusLabel
 const { changeDraft, EMPTY_EDIT, EMPTY_NEW, existingLink, parseTags, nodeInputFromDraft, nodePatchFromDraft, sourceLocation, historyValue } = await import(pathToFileURL(path.join(dir, 'research-state.js')).href);
 const api = await import(pathToFileURL(path.join(dir, 'api.js')).href);
 const { selectWorkspaceSnapshot, selectWorkspaceAgent } = await import(pathToFileURL(path.join(dir, 'workspace/selectors.js')).href);
+const { CARD_THEMES, DEFAULT_CARD_THEME, parseCardTheme } = await import(pathToFileURL(path.join(dir, 'card-themes.js')).href);
 const node = { id: 'node-7', type: 'hypothesis', title: 'Gateway policy。Verify middleware next.', detail: 'Session boundary', status: 'open', severity: 'high', confidence: 'static-confirmed' };
 
 test('node presenter splits a heading from evidence without rewriting it', () => {
@@ -301,6 +302,17 @@ test('workspace Agent perspectives preserve explicit identities and isolate curs
   assert.deepEqual(snapshot, before, 'reading another perspective cannot move a cursor or rewrite the snapshot');
 });
 
+test('workspace catalogues surface active goals and omit the current cursor goal from the goal list', () => {
+  const g1 = { id: 'g1', type: 'goal', title: 'Primary goal' };
+  const g2 = { id: 'g2', type: 'goal', title: 'Secondary goal' };
+  const gOld = { id: 'g3', type: 'goal', title: 'Superseded goal', status: 'superseded' };
+  const snapshot = { meta: {}, nodes: [g1, g2, gOld], edges: [], cursors: { 'agent:primary': { id: 'c1', agentId: 'agent:primary', to: 'g1' } } };
+  const board = selectWorkspaceSnapshot(snapshot);
+  assert.deepEqual(board.goals.map((item) => item.id), ['g1', 'g2']);
+  const agent = selectWorkspaceAgent(snapshot, board, 'agent:primary');
+  assert.deepEqual(agent.goals.map((item) => item.id), ['g2']);
+});
+
 test('workspace catalogues are usable while the first snapshot is still loading', () => {
   const board = selectWorkspaceSnapshot(null);
   const agent = selectWorkspaceAgent(null, board, 'agent:waiting');
@@ -550,4 +562,11 @@ test('mismatched receipt identity, command or result cannot release an unresolve
     assert.equal(operation.locked, false);
     assert.equal(completed, 1);
   } finally { globalThis.fetch = originalFetch; }
+});
+
+test('card theme parser exposes all five node card palettes and defaults safely', () => {
+  assert.deepEqual([...CARD_THEMES], ['clean', 'aura', 'mono', 'morandi', 'classic']);
+  assert.equal(DEFAULT_CARD_THEME, 'clean');
+  for (const theme of CARD_THEMES) assert.equal(parseCardTheme(theme), theme);
+  for (const invalid of [null, undefined, '', 'unknown', 42]) assert.equal(parseCardTheme(invalid), 'clean');
 });

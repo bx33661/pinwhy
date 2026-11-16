@@ -4,28 +4,34 @@ import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } fr
 import { Kbd } from '@/components/ui/kbd';
 import { t } from '../i18n';
 
-const GROUPS: { title: string; items: { keys: string[]; label: string }[] }[] = [
-  {
-    title: t('shortcuts.navigation'),
-    items: [
-      { keys: ['⌘ K', '/'], label: t('shortcuts.search') },
-      { keys: ['['], label: t('shortcuts.sidebar') },
-      { keys: ['?'], label: t('shortcuts.help') },
-      { keys: ['Esc'], label: t('shortcuts.escape') },
-    ],
-  },
-  {
-    title: t('shortcuts.canvas'),
-    items: [
-      { keys: ['← ↑ → ↓'], label: t('shortcuts.arrows') },
-      { keys: ['Tab'], label: t('shortcuts.tab') },
-      { keys: ['Enter', 'Space'], label: t('shortcuts.enter') },
-      { keys: [t('shortcuts.wheel'), t('shortcuts.drag')], label: t('shortcuts.zoomPan') },
-    ],
-  },
-];
+function buildGroups(): { title: string; items: { keys: string[]; label: string }[] }[] {
+  return [
+    {
+      title: t('shortcuts.navigation'),
+      items: [
+        { keys: ['⌘ K', '/'], label: t('shortcuts.search') },
+        { keys: ['['], label: t('shortcuts.sidebar') },
+        { keys: ['?'], label: t('shortcuts.help') },
+        { keys: ['Esc'], label: t('shortcuts.escape') },
+      ],
+    },
+    {
+      title: t('shortcuts.canvas'),
+      items: [
+        { keys: ['← ↑ → ↓'], label: t('shortcuts.arrows') },
+        { keys: ['Tab'], label: t('shortcuts.tab') },
+        { keys: ['Enter', 'Space'], label: t('shortcuts.enter') },
+        { keys: ['F'], label: t('shortcuts.fit') },
+        { keys: ['C'], label: t('shortcuts.locate') },
+        { keys: ['M'], label: t('shortcuts.minimap') },
+        { keys: [t('shortcuts.wheel'), t('shortcuts.drag')], label: t('shortcuts.zoomPan') },
+      ],
+    },
+  ];
+}
 
 export function ShortcutsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const groups = buildGroups();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[420px]">
@@ -37,7 +43,7 @@ export function ShortcutsDialog({ open, onOpenChange }: { open: boolean; onOpenC
           <DialogClose asChild><Button size="icon-sm" aria-label={t('shortcuts.close')}><X /></Button></DialogClose>
         </header>
         <div className="flex flex-col gap-5 px-5 py-4">
-          {GROUPS.map((group) => (
+          {groups.map((group) => (
             <section key={group.title}>
               <h3 className="m-0 mb-2 text-xs font-medium text-muted-foreground">{group.title}</h3>
               <ul className="m-0 flex list-none flex-col gap-2 p-0">

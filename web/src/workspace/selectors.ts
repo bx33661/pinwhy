@@ -14,6 +14,7 @@ export type WorkspaceSnapshot = {
   allEdges: BoardEdge[];
   activities: Activity[];
   byId: Map<string, BoardNode>;
+  goals: BoardNode[];
   findings: BoardNode[];
   openItems: BoardNode[];
   inbox: BoardNode[];
@@ -36,6 +37,7 @@ export function selectWorkspaceSnapshot(snapshot: GraphSnapshot | null): Workspa
     linked.add(edge.to);
   }
   const byId = new Map<string, BoardNode>();
+  const goals: BoardNode[] = [];
   const findings: BoardNode[] = [];
   const openItems: BoardNode[] = [];
   const inbox: BoardNode[] = [];
@@ -49,6 +51,7 @@ export function selectWorkspaceSnapshot(snapshot: GraphSnapshot | null): Workspa
     count(statuses, node.status || '');
     count(confidences, node.confidence || '');
     if (node.severity === 'critical' || node.severity === 'high') riskCount += 1;
+    if (node.type === 'goal' && node.status !== 'superseded') goals.push(node);
     if ((node.type === 'finding' || node.type === 'vuln') && node.status !== 'superseded') findings.push(node);
     // Same notion of open as stats.frontier / context.openThreads (deferred is closed).
     if ((node.type === 'intent' || node.type === 'hypothesis' || node.type === 'question') &&
@@ -65,7 +68,7 @@ export function selectWorkspaceSnapshot(snapshot: GraphSnapshot | null): Workspa
   }
   const stats = snapshot?.stats;
   return {
-    allNodes, allEdges, activities, byId, findings, openItems, inbox,
+    allNodes, allEdges, activities, byId, goals, findings, openItems, inbox,
     agentIds: [...agents].sort(compareAgents),
     paletteNodes: [...allNodes].sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0)),
     filterOptions: { types: options(types), statuses: options(statuses), confidences: options(confidences), riskCount },
@@ -87,6 +90,7 @@ export function selectWorkspaceAgent(snapshot: GraphSnapshot | null, board: Work
     current: currentId ? board.byId.get(currentId) || null : null,
     agentIds: board.agentIds.includes(agentId) ? board.agentIds : [...board.agentIds, agentId].sort(compareAgents),
     digest: snapshot?.digests?.[agentId] ?? (agentId === 'agent:primary' ? snapshot?.digest || '' : ''),
+    goals: currentId ? board.goals.filter((node) => node.id !== currentId) : board.goals,
     findings: currentId ? board.findings.filter((node) => node.id !== currentId) : board.findings,
     openItems: currentId ? board.openItems.filter((node) => node.id !== currentId) : board.openItems,
   };

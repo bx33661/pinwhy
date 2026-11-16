@@ -1,6 +1,7 @@
-import { Check, Copy, Focus, GitBranch, Globe, ImageDown, Keyboard, Languages, ListTree, Moon, Sun } from 'lucide-react';
+import { Check, Copy, Focus, GitBranch, Globe, ImageDown, Keyboard, Languages, ListTree, Moon, Sun, SwatchBook } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { CARD_THEMES, type CardTheme } from '../card-themes';
 import { TypeDot } from '../SecurityNode';
 import { typeLabel } from '../graph';
 import { presentNode, severityLabel, statusLabel } from '../presentation';
@@ -12,16 +13,18 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   nodes: BoardNode[];
   theme: 'light' | 'dark';
+  cardTheme: CardTheme;
   copied: boolean;
   onSelect: (id: string) => void;
   onMode?: (mode: ViewMode) => void;
   onTheme: () => void;
+  onCardTheme: (theme: CardTheme) => void;
   onCopyDigest: () => void;
   onExport: (() => void) | null;
   onShortcuts: () => void;
 };
 
-export function CommandPalette({ open, onOpenChange, nodes, theme, copied, onSelect, onMode, onTheme, onCopyDigest, onExport, onShortcuts }: Props) {
+export function CommandPalette({ open, onOpenChange, nodes, theme, cardTheme, copied, onSelect, onMode, onTheme, onCardTheme, onCopyDigest, onExport, onShortcuts }: Props) {
   const run = (action: () => void) => () => { onOpenChange(false); action(); };
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -47,6 +50,20 @@ export function CommandPalette({ open, onOpenChange, nodes, theme, copied, onSel
               </CommandItem>
               {onExport && <CommandItem value={`${t('palette.export')} png export`} onSelect={run(onExport)}><ImageDown className="size-4 text-muted-foreground" />{t('palette.export')}</CommandItem>}
               <CommandItem value={`${t('palette.shortcuts')} shortcuts keyboard help`} onSelect={run(onShortcuts)}><Keyboard className="size-4 text-muted-foreground" />{t('palette.shortcuts')}</CommandItem>
+            </CommandGroup>
+            <CommandGroup heading={t('toolbar.cardTheme')}>
+              {CARD_THEMES.map((id) => (
+                <CommandItem
+                  key={id}
+                  value={`${t('toolbar.cardTheme')} palette style ${id} ${t(`cardTheme.${id}`)}`}
+                  onSelect={run(() => onCardTheme(id))}
+                >
+                  <SwatchBook className="size-4 text-muted-foreground" />
+                  <span>{t(`cardTheme.${id}`)}</span>
+                  <span className="ml-1.5 truncate text-xs text-muted-foreground">{t(`cardTheme.${id}Hint`)}</span>
+                  {cardTheme === id && <Check className="ml-auto size-4 shrink-0 text-muted-foreground" />}
+                </CommandItem>
+              ))}
             </CommandGroup>
             <CommandGroup heading={t('palette.language')}>
               {LOCALES.map((option) => (

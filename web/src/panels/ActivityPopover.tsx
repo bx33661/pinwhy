@@ -10,7 +10,7 @@ export function ActivityPopover({ activities, total }: { activities: Activity[];
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button size="sm" aria-label={t('activity.label')}><ActivityIcon className="size-3.5" /><span className="max-sm:hidden">{t('activity.button')}</span><span className="tabular-nums text-muted-foreground">{total}</span></Button>
+        <Button size="sm" variant="ghost" className={cn('text-subtle hover:text-foreground', total > 0 && 'bg-secondary/50 hover:bg-secondary')} aria-label={t('activity.label')}><ActivityIcon className="size-3.5" /><span className="max-sm:hidden">{t('activity.button')}</span><span className="tabular-nums text-muted-foreground">{total}</span></Button>
       </PopoverTrigger>
       <PopoverContent className="w-[360px] p-0">
         <div className="flex h-10 items-center justify-between border-b px-3.5 text-[13px] font-medium">

@@ -83,3 +83,15 @@ test('Inspector retains authored relation labels and reports their recorded inpu
   assert.ok(html.includes('506') && html.includes('500'));
 });
 
+test('Inspector highlights inline backtick code spans in detail without dropping surrounding text or unmatched backticks', () => {
+  const codeNode = {
+    ...node,
+    id: 'code-node-1',
+    detail: 'Request `GET /api/v2/admin/users` succeeded and left an unmatched `tail.',
+  };
+  const html = render(createElement(Inspector, { ...inspectorProps, node: codeNode, byId: new Map([[codeNode.id, codeNode]]) }));
+  assert.ok(html.includes('>code-node-1<'));
+  assert.ok(html.includes('>GET /api/v2/admin/users</code>'));
+  assert.ok(html.includes('succeeded and left an unmatched `tail.'));
+});
+

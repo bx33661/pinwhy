@@ -200,14 +200,14 @@ export function Topbar(props: Props) {
         <span role="status" title={status.label} className="mr-1 flex items-center gap-1.5 text-xs text-muted-foreground">
           <i className={cn('size-1.5 rounded-full', status.dot)} /><span className="max-xl:sr-only">{status.label}</span>
         </span>
-        <Button size="sm" className="max-md:hidden" onClick={onSearch} aria-label={t('topbar.searchCommands')}>
+        <Button size="sm" variant="ghost" className="max-md:hidden bg-secondary/60 text-subtle hover:bg-secondary hover:text-foreground" onClick={onSearch} aria-label={t('topbar.searchCommands')}>
           <Search className="size-3.5" /><Kbd>⌘K</Kbd>
         </Button>
         <IconButton label={t('topbar.search')} className="md:hidden" onClick={onSearch}><Search /></IconButton>
         <ActivityPopover activities={activities} total={activityTotal} />
         {onTimeline && <IconButton label={timelineOpen ? t('timeline.close') : t('timeline.open')} aria-pressed={timelineOpen} onClick={onTimeline}><History /></IconButton>}
-        {onNew && <Button size="sm" onClick={onNew} aria-label={t('topbar.newNode')}><Plus className="size-3.5" /><span className="max-sm:hidden">{t('topbar.new')}</span></Button>}
-        <Button ref={digestRef} size="sm" onClick={onDigest} aria-label={t('topbar.digestLabel')}><FileText className="size-3.5" /><span className="max-sm:hidden">{t('topbar.digest')}</span></Button>
+        {onNew && <Button size="sm" variant="default" className="shadow-xs" onClick={onNew} aria-label={t('topbar.newNode')}><Plus className="size-3.5" /><span className="max-sm:hidden">{t('topbar.new')}</span></Button>}
+        <Button ref={digestRef} size="sm" variant="ghost" className="text-subtle hover:text-foreground" onClick={onDigest} aria-label={t('topbar.digestLabel')}><FileText className="size-3.5" /><span className="max-sm:hidden">{t('topbar.digest')}</span></Button>
         <IconButton label={theme === 'light' ? t('theme.toDark') : t('theme.toLight')} onClick={onTheme}>{theme === 'light' ? <Moon /> : <Sun />}</IconButton>
       </div>
     </header>

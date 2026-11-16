@@ -68,11 +68,12 @@ try {
   page.on('pageerror', (error) => errors.push(String(error)));
   await page.goto(`${url}/?workspace=audit&issue=q0&candidate=fd0`);
   await page.getByRole('navigation', { name: '审计导航', exact: true }).waitFor();
+  const dossier = page.getByRole('region', { name: '论证卷宗', exact: true });
+  await dossier.waitFor();
 
-  const nav = page.getByRole('navigation', { name: '审计导航', exact: true });
-  const support = nav.getByRole('region', { name: '支持与推导', exact: true });
+  const support = dossier.getByRole('region', { name: '支持与推导', exact: true });
   await support.getByText('共 65 条 · 已展示 12 条 · 未展开 53 条', { exact: true }).waitFor();
-  assert.ok(await page.locator('.react-flow__node').count() < 25, 'initial argument remains bounded');
+  assert.equal(await page.locator('.react-flow__node').count(), 0, 'dossier is the default reading surface; argument graph stays closed');
   await support.getByRole('button', { name: '支持与推导 · 显示更多', exact: true }).click();
   await support.getByText('共 65 条 · 已展示 24 条 · 未展开 41 条', { exact: true }).waitFor();
   await support.getByRole('button', { name: '支持与推导 · 收起', exact: true }).click();
@@ -80,14 +81,14 @@ try {
   assert.equal(hash(), initialHash);
   ok('large audit groups show exact totals, expand and collapse without writing');
 
-  await page.locator('.react-flow__node[data-id="f0"]').getByRole('button', { name: 'Synthetic evidence 0 · 存在反驳记录 · 1', exact: true }).click();
+  await dossier.getByRole('button', { name: 'Synthetic evidence 0 · f0', exact: true }).click();
   const inspector = page.getByRole('complementary', { name: '节点详情', exact: true });
   await inspector.getByRole('heading', { name: 'Synthetic evidence 0', exact: true }).waitFor();
-  const local = nav.getByRole('region', { name: '证据与条件记录详情: f0', exact: true });
+  const local = dossier.getByRole('region', { name: '证据与条件记录详情: f0', exact: true });
   assert.equal(await local.getByRole('button', { name: 'Synthetic evidence 0 · 存在反驳记录 · 1', exact: true }).getAttribute('aria-expanded'), 'true');
   await local.getByRole('button', { name: 'Synthetic rebuttal of evidence · r0', exact: true }).waitFor();
   assert.ok((await local.innerText()).includes('Challenges this evidence, not the root finding.'));
-  assert.equal(await nav.getByRole('region', { name: '反证', exact: true }).getByRole('button', { name: '反证 · 0', exact: true }).count(), 1);
+  assert.equal(await dossier.getByRole('region', { name: '反证', exact: true }).getByRole('button', { name: '反证 · 0', exact: true }).count(), 1);
   assert.equal(new URL(page.url()).searchParams.get('candidate'), 'fd0');
   assert.equal(hash(), initialHash);
   await page.screenshot({ path: path.join(output, 'evidence-challenge.png'), fullPage: true }); artifacts.push('evidence-challenge.png');
@@ -95,8 +96,7 @@ try {
 
   await page.goto(`${url}/?workspace=audit&issue=q0&candidate=fd0&node=f64`);
   await inspector.getByRole('heading', { name: 'Synthetic evidence 64', exact: true }).waitFor();
-  await page.locator('.react-flow__node[data-id="f64"]').waitFor();
-  assert.ok(await page.locator('.react-flow__node').count() < 25, 'deep link pins one hidden record without opening all preceding records');
+  await dossier.getByRole('button', { name: 'Synthetic evidence 64 · f64', exact: true }).waitFor();
   assert.equal(hash(), initialHash);
   await page.setViewportSize({ width: 390, height: 844 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
@@ -111,6 +111,7 @@ try {
   offlinePage.on('request', (request) => { if (/\/api\/|\/events/.test(request.url())) offlineRequests.push(request.url()); });
   await offlinePage.goto(`${pathToFileURL(offline).href}?workspace=audit&issue=q0&candidate=fd0`);
   await offlinePage.getByRole('navigation', { name: '审计导航', exact: true }).waitFor();
+  await offlinePage.getByRole('region', { name: '论证卷宗', exact: true }).waitFor();
   assert.equal(await offlinePage.getByRole('button', { name: '新建节点', exact: true }).count(), 0);
   assert.deepEqual(offlineRequests, []);
   assert.equal(hash(), initialHash);
@@ -124,6 +125,7 @@ try {
   await page.goto(`${url}/?workspace=audit&issue=q0&candidate=fd0&node=fd0`);
   await inspector.getByRole('heading', { name: 'Synthetic candidate 0', exact: true }).waitFor();
   const related = inspector.getByRole('region', { name: '添加相关节点', exact: true });
+  await related.getByRole('button', { name: '添加相关节点', exact: true }).click();
   await related.getByLabel('新节点标题', { exact: true }).fill('Synthetic atomic evidence');
   await related.getByLabel('与当前节点的关系', { exact: true }).selectOption('supports');
   await related.getByLabel('关系说明', { exact: true }).fill('Authored atomic support');

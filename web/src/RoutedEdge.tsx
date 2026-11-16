@@ -4,7 +4,7 @@ import { labelPoint, roundedPath, routeValid, type EdgeRoute } from './edge-rout
 import { routeAround, type Rect } from './router';
 import type { EdgeStyle } from './graph';
 
-type RoutedData = { route?: EdgeRoute; style?: EdgeStyle; text?: string; group?: string; quiet?: boolean };
+type RoutedData = { route?: EdgeRoute; style?: EdgeStyle; text?: string; group?: string; quiet?: boolean; reversed?: boolean; focused?: boolean };
 
 /** From here on a card is legible, so the relation it hangs on is worth naming too. */
 const LABEL_ZOOM = .6;
@@ -15,7 +15,7 @@ const LABEL_ZOOM = .6;
  */
 export const RoutedEdge = memo(function RoutedEdge(props: EdgeProps) {
   const { source, target, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, markerStart, markerEnd, style, label, interactionWidth } = props;
-  const { route, style: shape = 'curve', text, group, quiet } = (props.data || {}) as RoutedData;
+  const { route, style: shape = 'curve', text, group, quiet, reversed, focused } = (props.data || {}) as RoutedData;
   const [interacting, setInteracting] = useState(false);
   // Weak, quiet links stay unnamed until focused; the strong families say what they are once readable.
   const named = useStore((state) => state.transform[2] >= LABEL_ZOOM);
@@ -56,8 +56,49 @@ export const RoutedEdge = memo(function RoutedEdge(props: EdgeProps) {
     // Boxed in on every side: a plain curve is the last resort.
     [path, labelX, labelY] = getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition });
   }
+  const tone = group && group !== 'link' ? `var(--rel-${group})` : null;
+  const showFlow = Boolean(focused || interacting);
+  const strokeColor = tone || 'var(--ink)';
+  const originX = reversed ? targetX : sourceX;
+  const originY = reversed ? targetY : sourceY;
   return <g tabIndex={0} role="img" aria-label={text} onFocus={() => setInteracting(true)} onBlur={() => setInteracting(false)} onMouseEnter={() => setInteracting(true)} onMouseLeave={() => setInteracting(false)}>
     <title>{text}</title>
-    <BaseEdge path={path} labelX={labelX} labelY={labelY} label={shown} markerStart={markerStart} markerEnd={markerEnd} style={style} interactionWidth={interactionWidth} />
+    <BaseEdge
+      path={path}
+      labelX={labelX}
+      labelY={labelY}
+      label={shown}
+      labelBgBorderRadius={6}
+      labelBgPadding={[6, 3]}
+      labelStyle={{ fill: tone ? `color-mix(in srgb, ${tone} 82%, var(--ink))` : 'var(--ink-2)', fontSize: 10.5, fontWeight: 500 }}
+      labelBgStyle={{
+        fill: tone ? `color-mix(in srgb, ${tone} 9%, var(--surface))` : 'var(--surface)',
+        stroke: tone ? `color-mix(in srgb, ${tone} 40%, var(--line-strong))` : 'var(--line-strong)',
+        strokeWidth: 1,
+      }}
+      markerStart={markerStart}
+      markerEnd={markerEnd}
+      style={style}
+      interactionWidth={interactionWidth}
+    />
+    {showFlow && (
+      <>
+        <path
+          d={path}
+          fill="none"
+          className={`react-flow__edge-flow pointer-events-none${reversed ? ' is-reversed' : ''}`}
+          style={{ stroke: strokeColor }}
+        />
+        <circle
+          className="react-flow__edge-anchor pointer-events-none"
+          cx={originX}
+          cy={originY}
+          r={3}
+          fill="var(--surface)"
+          stroke={strokeColor}
+          strokeWidth={1.75}
+        />
+      </>
+    )}
   </g>;
 });

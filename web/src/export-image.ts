@@ -15,11 +15,12 @@ function svgPaintRules(viewport: HTMLElement) {
     const scope = `.react-flow__edge[data-id="${CSS.escape(edge.dataset.id || '')}"]`;
     return rule(`${scope} .react-flow__edge-path`, edge.querySelector('.react-flow__edge-path'), ['stroke', 'stroke-opacity'])
       + rule(`${scope} .react-flow__edge-text`, edge.querySelector('.react-flow__edge-text'), ['fill', 'font-size', 'font-weight', 'opacity'])
-      + rule(`${scope} .react-flow__edge-textbg`, edge.querySelector('.react-flow__edge-textbg'), ['fill', 'opacity']);
+      + rule(`${scope} .react-flow__edge-textbg`, edge.querySelector('.react-flow__edge-textbg'), ['fill', 'stroke', 'stroke-width', 'opacity'])
+      + rule(`${scope} .react-flow__edge-anchor`, edge.querySelector('.react-flow__edge-anchor'), ['fill', 'stroke', 'stroke-width']);
   });
   const markers = [...viewport.querySelectorAll('marker')].map((marker) =>
     rule(`[id="${CSS.escape(marker.id)}"] polyline`, marker.querySelector('polyline'), ['stroke', 'fill']));
-  return edges.join('') + markers.join('');
+  return edges.join('') + markers.join('') + '.react-flow__edge-flow{display:none!important}';
 }
 
 /** Render the whole board (not just the viewport) to a PNG and hand it to the browser as a download. */

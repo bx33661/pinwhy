@@ -6,6 +6,7 @@ import type { ViewMode } from '../types';
 export type Scene3DHandle = { exportImage: () => Promise<void> };
 /** Pixels covered by the Inspector at the right or bottom edge of the canvas. */
 export type SceneOcclusion = { right: number; bottom: number };
+export type CameraPreset = 'iso' | 'top';
 
 export type Scene3DProps = {
   nodes: CanvasNode[];
@@ -13,12 +14,15 @@ export type Scene3DProps = {
   mode: ViewMode;
   /** The view that produced nodes; updated only after its asynchronous layout completes. */
   layoutMode: ViewMode | null;
+  direction: 'RIGHT' | 'DOWN';
   theme: 'light' | 'dark';
   selectedId: string | null;
   /** The selection and its explicitly recorded one-hop neighbours; everything else is muted. */
   highlighted: ReadonlySet<string>;
   currentId: string | null;
+  canFollow: boolean;
   follow: boolean;
+  showLegend: boolean;
   fresh: ReadonlySet<string>;
   /** False under prefers-reduced-motion: no orbit, flights, pulses or breathing. */
   motion: boolean;
@@ -26,15 +30,18 @@ export type Scene3DProps = {
   ref: Ref<Scene3DHandle>;
   exporting: boolean;
   onExport: () => void;
+  onDirection: () => void;
+  onToggleFollow: () => void;
+  onToggleLegend: () => void;
   onSelect: (id: string | null) => void;
   onExit: () => void;
   onNotice: (message: string) => void;
 };
 
-/** Quality steps PerformanceMonitor walks down: 2 full, 1 lower resolution, 0 no shadows or tilt-shift. */
+/** Quality steps PerformanceMonitor walks down: 2 full, 1 lower resolution, 0 no shadows or post blur. */
 export type Quality = 0 | 1 | 2;
 
-export type Command = { kind: 'home' | 'focus'; id?: string; serial: number };
+export type Command = { kind: 'home' | 'focus' | 'preset'; id?: string; preset?: CameraPreset; serial: number };
 
 /** The card under the pointer; written every hover, read every frame, so it never re-renders the scene. */
 export type HoverRef = { current: string | null };

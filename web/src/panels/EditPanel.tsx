@@ -1,15 +1,17 @@
 import { useState } from 'react';
-import { Link2, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Link2, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import * as api from '../api';
+import { NodeTypeIcon, TypeDot } from '../SecurityNode';
 import { confidenceLabel, matchesNode, severityLabel, statusLabel, typeLabel } from '../presentation';
 import { relationLabel } from '../graph';
 import type { BoardNode } from '../types';
 import { t } from '../i18n';
 import { useNodeConnect, useNodeCreate, useNodeEdit } from './use-node-forms';
-import { parseTags, sourceLocation } from '../research-state';
+import { EMPTY_NEW, parseTags, sourceLocation } from '../research-state';
 
 const field = 'w-full rounded-md border border-strong bg-card px-2 text-[13px] text-foreground outline-none transition-colors placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring';
 
@@ -106,18 +108,74 @@ export function EditSection({ node, onReload }: { node: BoardNode; onReload: () 
   );
 }
 
+function TypePicker({ value, disabled, onChange }: { value: string; disabled: boolean; onChange: (value: string) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverAnchor asChild>
+        <div className="flex w-36 shrink-0 items-center overflow-hidden rounded-md border border-strong bg-card focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-ring">
+          <span className="flex shrink-0 items-center pl-2" aria-hidden="true">
+            <TypeDot type={value} className="size-2" />
+          </span>
+          <input
+            aria-label={t('edit.type')}
+            className="h-8 min-w-0 flex-1 bg-transparent px-1.5 text-[13px] text-foreground outline-none placeholder:text-muted-foreground"
+            value={value}
+            disabled={disabled}
+            onChange={(event) => onChange(event.target.value)}
+          />
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              aria-label={t('edit.chooseType')}
+              title={t('edit.chooseType')}
+              disabled={disabled}
+              className="flex h-8 shrink-0 items-center justify-center border-l px-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+            >
+              <ChevronDown className="size-3.5" />
+            </button>
+          </PopoverTrigger>
+        </div>
+      </PopoverAnchor>
+      <PopoverContent align="start" sideOffset={6} className="w-[min(340px,calc(100vw-2rem))] p-1.5">
+        <div className="grid grid-cols-2 gap-1">
+          {api.CREATABLE_TYPES.map((item) => {
+            const active = value === item;
+            return (
+              <button
+                key={item}
+                type="button"
+                aria-pressed={active}
+                onClick={() => { onChange(item); setOpen(false); }}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent',
+                  active && 'bg-accent font-medium text-foreground',
+                )}
+              >
+                <TypeDot type={item} className="size-2" />
+                <span className="text-muted-foreground"><NodeTypeIcon type={item} size={12} /></span>
+                <span className="min-w-0 flex-1 truncate">{typeLabel(item)}</span>
+                <span className="font-mono text-[10px] text-muted-foreground">{item}</span>
+              </button>
+            );
+          })}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 /** A new card, optionally tied to the selected one. */
-function NodeForm({ current, onDone, autoFocus }: { current?: BoardNode; onDone?: () => void; autoFocus?: boolean }) {
-  const { draft, busy: pending, locked, operation, error, change, discard, submit } = useNodeCreate(current, onDone);
+function NodeFormView({ current, form, autoFocus }: { current?: BoardNode; form: ReturnType<typeof useNodeCreate>; autoFocus?: boolean }) {
+  const { draft, busy: pending, locked, operation, error, change, discard, submit } = form;
   const busy = pending || locked;
   const { type, title, link } = draft;
 
   return (
     <form className="flex flex-col gap-2" onSubmit={submit}>
       <div className="flex gap-2">
-        <input aria-label={t('edit.type')} list={`node-types-${current?.id ?? 'standalone'}`} className={cn(field, 'h-8 w-28 shrink-0')} value={type} disabled={busy} onChange={(event) => change('type', event.target.value)} />
-        <datalist id={`node-types-${current?.id ?? 'standalone'}`}>{api.CREATABLE_TYPES.map((item) => <option key={item} value={item}>{typeLabel(item)}</option>)}</datalist>
-        <input aria-label={t('edit.newTitle')} className={cn(field, 'h-8')} value={title} disabled={busy} onChange={(e) => change('title', e.target.value)} placeholder={t('edit.newPlaceholder')} autoFocus={autoFocus} />
+        <TypePicker value={type} disabled={busy} onChange={(value) => change('type', value)} />
+        <input aria-label={t('edit.newTitle')} className={cn(field, 'h-8 min-w-0 flex-1')} value={title} disabled={busy} onChange={(e) => change('title', e.target.value)} placeholder={t('edit.newPlaceholder')} autoFocus={autoFocus} />
       </div>
       <textarea aria-label={t('edit.detail')} className={cn(field, 'min-h-16 py-1.5')} value={draft.detail} disabled={busy} onChange={(event) => change('detail', event.target.value)} placeholder={t('edit.detailPlaceholder')} />
       <TagFields value={draft.tags} onChange={(value) => change('tags', value)} disabled={busy} />
@@ -153,12 +211,30 @@ function NodeForm({ current, onDone, autoFocus }: { current?: BoardNode; onDone?
 }
 
 export function AddSection({ node }: { node: BoardNode }) {
+  const form = useNodeCreate(node);
+  const [open, setOpen] = useState(false);
+  const hasState = JSON.stringify(form.draft) !== JSON.stringify(EMPTY_NEW) || form.locked || Boolean(form.error);
+  const expanded = open || hasState;
   return (
-    <section className="mt-5 flex flex-col gap-2" aria-label={t('edit.related')}>
-      <h3 className="m-0 text-xs font-medium text-muted-foreground">{t('edit.related')}</h3>
-      <NodeForm current={node} />
+    <section className="mt-4 flex flex-col gap-2 border-t pt-3.5" aria-label={t('edit.related')}>
+      <button
+        type="button"
+        aria-expanded={expanded}
+        onClick={() => setOpen((value) => !value)}
+        className="group flex w-full items-center gap-1.5 rounded-md py-1 text-left text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <Plus className="size-3.5 shrink-0" aria-hidden="true" />
+        <span className="flex-1">{t('edit.related')}</span>
+        <ChevronRight className={cn('size-3.5 shrink-0 transition-transform', expanded && 'rotate-90')} aria-hidden="true" />
+      </button>
+      {expanded && <NodeFormView current={node} form={form} />}
     </section>
   );
+}
+
+function StandaloneNodeForm({ onDone }: { onDone: () => void }) {
+  const form = useNodeCreate(undefined, onDone);
+  return <NodeFormView autoFocus form={form} />;
 }
 
 export function NewNodeDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
@@ -172,7 +248,7 @@ export function NewNodeDialog({ open, onOpenChange }: { open: boolean; onOpenCha
           </div>
           <DialogClose asChild><Button size="icon-sm" aria-label={t('common.close')}><X /></Button></DialogClose>
         </header>
-        <div className="px-5 py-4"><NodeForm autoFocus onDone={() => onOpenChange(false)} /></div>
+        <div className="px-5 py-4"><StandaloneNodeForm onDone={() => onOpenChange(false)} /></div>
       </DialogContent>
     </Dialog>
   );
@@ -181,11 +257,23 @@ export function NewNodeDialog({ open, onOpenChange }: { open: boolean; onOpenCha
 /** Connect existing records explicitly. Selection is UI state, never a cursor move. */
 export function ConnectSection({ node, byId, onReload }: { node: BoardNode; byId: Map<string, BoardNode>; onReload: () => Promise<void> }) {
   const { draft, link, done, busy: pending, locked, error, change, submit } = useNodeConnect(node, byId, onReload);
+  const [open, setOpen] = useState(false);
+  const hasState = Boolean(draft.peerId || draft.query || draft.label || locked || error || done);
+  const expanded = open || hasState;
   const busy = pending || locked;
   const peers = [...byId.values()].filter((peer) => peer.id !== node.id && (peer.id === draft.peerId || matchesNode(peer, draft.query)));
-  return <section className="mt-5 flex flex-col gap-2 border-t pt-4" aria-label={t('connect.heading')}>
-    <h3 className="m-0 text-xs font-medium text-muted-foreground">{t('connect.heading')}</h3>
-    <form className="flex flex-col gap-2" onSubmit={submit}>
+  return <section className="mt-5 flex flex-col gap-2 border-t pt-3.5" aria-label={t('connect.heading')}>
+    <button
+      type="button"
+      aria-expanded={expanded}
+      onClick={() => setOpen((value) => !value)}
+      className="group flex w-full items-center gap-1.5 rounded-md py-1 text-left text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+    >
+      <Link2 className="size-3.5 shrink-0" aria-hidden="true" />
+      <span className="flex-1">{t('connect.heading')}</span>
+      <ChevronRight className={cn('size-3.5 shrink-0 transition-transform', expanded && 'rotate-90')} aria-hidden="true" />
+    </button>
+    {expanded && <form className="flex flex-col gap-2" onSubmit={submit}>
       <input aria-label={t('connect.search')} placeholder={t('connect.search')} className={cn(field, 'h-8')} value={draft.query} disabled={busy} onChange={(e) => change('query', e.target.value)} />
       <select aria-label={t('connect.peer')} className={cn(field, 'h-8')} value={draft.peerId} disabled={busy} onChange={(e) => change('peerId', e.target.value)}>
         <option value="">{t('connect.peer')}</option>
@@ -203,6 +291,6 @@ export function ConnectSection({ node, byId, onReload }: { node: BoardNode; byId
       <Button type="submit" variant="outline" size="sm" className="self-start" disabled={busy || !link || !byId.has(draft.peerId)}><Link2 className="size-3.5" />{t('connect.submit')}</Button>
       {done && <p role="status" className="m-0 text-xs text-muted-foreground">{t('connect.done')}</p>}
       <Error_ message={error} />
-    </form>
+    </form>}
   </section>;
 }

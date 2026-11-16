@@ -10,6 +10,7 @@ import { typeLabel } from './graph';
 import { BaseNode } from './components/react-flow/base-node';
 import { detailLevel } from './canvas-state';
 import { confidenceLabel, nodeStateSummary, presentNode, statusLabel } from './presentation';
+import { sourceLocation } from './research-state';
 import { SeverityBadge } from './SeverityBadge';
 import { t } from './i18n';
 
@@ -48,10 +49,11 @@ export function TypeDot({ type, className }: { type: string; className?: string 
 const handleClass = 'size-1! min-h-0! min-w-0! border-0! bg-transparent! opacity-0! pointer-events-none!';
 
 export const SecurityNode = memo(function SecurityNode({ data, selected }: NodeProps<CanvasNode>) {
-  const { item, current, dimmed, direction, compact, muted, fresh, agents, change, changeFields } = data;
+  const { item, current, dimmed, direction, compact, muted, hoverMuted, hoverPeer, fresh, agents, change, changeFields } = data;
   const level = useStore((state) => detailLevel(state.transform[2]));
   const vertical = direction === 'DOWN';
   const text = presentNode(item);
+  const loc = sourceLocation(item);
   const severe = item.severity === 'critical' || item.severity === 'high';
   const state = nodeStateSummary(item);
   const progress = nodeStateSummary({ status: item.status, confidence: item.confidence });
@@ -65,24 +67,29 @@ export const SecurityNode = memo(function SecurityNode({ data, selected }: NodeP
       tabIndex={-1}
       style={{ '--c': `var(--node-${item.type in DOT_CLASS ? item.type : 'note'})` } as CSSProperties}
       data-detail-level={level}
+      data-severe={severe && !retired ? 'true' : undefined}
       title={change === 'added' ? `${t('node.changeAdded')}\n${t('node.previewHint')}` : change === 'updated' ? `${t('node.changeUpdated', { fields: (changeFields || []).join(', ') })}\n${t('node.previewHint')}` : t('node.previewHint')}
       aria-label={`${typeLabel(item.type)}：${item.title}${state ? ` · ${state}` : ''}`}
       className={cn(
-        'flex flex-col gap-1.5 py-3 pl-4 pr-3.5 text-left',
-        // Each kind carries its own hue: a faint wash, a tinted edge and an accent bar.
-        'border-[color-mix(in_srgb,var(--c)_24%,var(--line))] bg-[color-mix(in_srgb,var(--c)_7%,var(--surface))]',
+        'pinwhy-card flex flex-col gap-1.5 py-3 pl-4 pr-3.5 text-left transition-[opacity,box-shadow,border-color,background-color] duration-150',
         current && 'current-halo',
         current && !selected && 'border-live ring-2 ring-live/60',
         selected && 'ring-1 ring-foreground',
+        hoverPeer && !selected && 'border-strong ring-1 ring-strong',
         overview && severe && 'border-destructive/60',
+        retired && 'border-dashed saturate-[.55]',
+        retired && !selected && !hoverPeer && !muted && !hoverMuted && 'opacity-80',
+        retired && !selected && 'border-strong/80 bg-secondary/45',
         dimmed && 'opacity-25',
         muted && 'opacity-35',
+        hoverMuted && !muted && 'opacity-55',
         fresh && 'fresh-pulse',
         change === 'added' && 'change-added',
         change === 'updated' && 'change-updated',
       )}
     >
-      <i aria-hidden className="absolute bottom-3 left-0 top-3 w-[3px] rounded-r-full bg-(--c)" />
+      <i aria-hidden className={cn('pinwhy-card-bar absolute', retired && 'opacity-35')} />
+      <i aria-hidden className={cn('pinwhy-card-wash pointer-events-none', retired && 'opacity-30')} />
       <Handle type="target" position={vertical ? Position.Top : Position.Left} className={handleClass} />
       {overview && change && (
         <span className="zoom-chip at-left inline-flex items-center gap-1 rounded-md border border-strong bg-card px-2 font-mono text-[11px] text-foreground">
@@ -102,8 +109,8 @@ export const SecurityNode = memo(function SecurityNode({ data, selected }: NodeP
         </span>
       )}
       {!overview && (
-        <header className="flex items-center gap-1.5 text-[11px] leading-4 text-muted-foreground">
-          <span className="inline-flex shrink-0 items-center gap-1 font-medium text-[color-mix(in_srgb,var(--c)_78%,var(--ink))]">
+        <header className="relative flex items-center gap-1.5 text-[11px] leading-4 text-muted-foreground">
+          <span className="pinwhy-type-pill inline-flex shrink-0 items-center gap-1 font-medium">
             <NodeTypeIcon type={item.type} size={12} />{typeLabel(item.type)}
           </span>
           {current && (
@@ -121,27 +128,38 @@ export const SecurityNode = memo(function SecurityNode({ data, selected }: NodeP
               {change === 'added' ? '+' : '~'}
             </span>
           )}
-          <span title={progress} className="ml-auto min-w-0 truncate">{progress}</span>
+          {retired ? (
+            <span className="ml-auto flex min-w-0 items-center gap-1">
+              <span className="shrink-0 rounded border border-dashed border-strong bg-background/70 px-1 text-[10px] leading-4 text-muted-foreground">{statusLabel(item.status)}</span>
+              {item.confidence && <span title={confidenceLabel(item.confidence)} className="min-w-0 truncate">{confidenceLabel(item.confidence)}</span>}
+            </span>
+          ) : (
+            <span title={progress} className="ml-auto min-w-0 truncate">{progress}</span>
+          )}
           {item.severity && <SeverityBadge severity={item.severity} />}
         </header>
       )}
-      {data.auditRoles && <p className="m-0 truncate text-[11px] font-medium leading-4 text-muted-foreground" title={data.auditRoles.map((role) => t(`audit.${role}`)).join(' · ')}>{data.auditRoles.map((role) => t(`audit.${role}`)).join(' · ')}</p>}
-      {data.auditCounts && (data.auditCounts.contradiction > 0 || data.auditCounts.condition > 0) && <div className="flex flex-wrap gap-1 text-[11px] font-medium leading-4">
+      {data.auditRoles && <p className="relative m-0 truncate text-[11px] font-medium leading-4 text-muted-foreground" title={data.auditRoles.map((role) => t(`audit.${role}`)).join(' · ')}>{data.auditRoles.map((role) => t(`audit.${role}`)).join(' · ')}</p>}
+      {data.auditCounts && (data.auditCounts.contradiction > 0 || data.auditCounts.condition > 0) && <div className="relative flex flex-wrap gap-1 text-[11px] font-medium leading-4">
         {data.auditCounts.contradiction > 0 && <button type="button" data-audit-detail="contradiction" aria-label={`${item.title || item.id} · ${t('audit.hasContradictions')} · ${data.auditCounts.contradiction}`} className="nodrag nopan rounded border border-foreground/40 bg-background px-1.5 py-0.5 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring">{t('audit.hasContradictions')} · {data.auditCounts.contradiction}</button>}
         {data.auditCounts.condition > 0 && <button type="button" data-audit-detail="condition" aria-label={`${item.title || item.id} · ${t('audit.hasConditions')} · ${data.auditCounts.condition}`} className="nodrag nopan rounded border border-foreground/40 bg-background px-1.5 py-0.5 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring">{t('audit.hasConditions')} · {data.auditCounts.condition}</button>}
       </div>}
       <h3
         title={item.title}
         className={cn(
-          'm-0 font-medium text-foreground',
+          'relative m-0 font-medium text-foreground',
           overview ? (compact ? 'text-[18px] leading-[1.3] line-clamp-3' : 'text-[22px] leading-[1.3] line-clamp-2') : 'text-sm leading-5 line-clamp-2',
+          retired && 'text-muted-foreground line-through decoration-muted-foreground/60 decoration-1',
         )}
       >
         {overview && <TypeDot type={item.type} className="mr-2 mb-0.5 size-2.5 align-middle" />}
         {text.headline}
       </h3>
       {level === 'detail' && !compact && text.summary && (
-        <p className="m-0 line-clamp-2 text-xs leading-[18px] text-muted-foreground">{text.summary}</p>
+        <p className={cn('relative m-0 text-xs leading-[18px] text-muted-foreground', loc ? 'line-clamp-1' : 'line-clamp-2')}>{text.summary}</p>
+      )}
+      {level === 'detail' && !compact && loc && (
+        <p className="relative m-0 mt-auto truncate font-mono text-[10.5px] leading-4 text-muted-foreground/90" title={loc}>{loc}</p>
       )}
       <Handle type="source" position={vertical ? Position.Bottom : Position.Right} className={handleClass} />
     </BaseNode>

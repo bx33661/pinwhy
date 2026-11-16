@@ -1,6 +1,6 @@
 // Adapted from https://ui.reactflow.dev/labeled-group-node (xyflow, MIT).
-import { type ReactNode, type ComponentProps } from "react";
-import { Panel, type NodeProps, type PanelPosition } from "@xyflow/react";
+import { type ComponentProps, type CSSProperties, type ReactNode } from "react";
+import { type NodeProps, type PanelPosition } from "@xyflow/react";
 
 import { BaseNode } from "@/components/react-flow/base-node";
 import { cn } from "@/lib/utils";
@@ -16,18 +16,19 @@ export function GroupNodeLabel({ children, className, ...props }: ComponentProps
 export type GroupNodeProps = Partial<NodeProps> & {
   label?: ReactNode;
   position?: PanelPosition;
+  className?: string;
+  style?: CSSProperties;
 };
 
-export function GroupNode({ label, position, ...props }: GroupNodeProps) {
+export function GroupNode({ label, position: _position, className, style, ...props }: GroupNodeProps) {
   return (
     <BaseNode
       tabIndex={-1}
-      className="overflow-hidden rounded-2xl border-dashed bg-secondary/40 shadow-none hover:border-border"
+      style={style}
+      className={cn("rounded-2xl border border-border/90 bg-secondary/30 shadow-xs hover:border-border", className)}
       {...props}
     >
-      <Panel className="m-0 p-0" position={position}>
-        {label && <GroupNodeLabel>{label}</GroupNodeLabel>}
-      </Panel>
+      {label && <div className="pointer-events-none absolute left-4 right-4 top-3.5 z-10">{label}</div>}
     </BaseNode>
   );
 }

@@ -15,10 +15,12 @@ import { t } from '../i18n';
 
 type Props = {
   current: BoardNode | null;
+  goals?: BoardNode[];
   openItems: BoardNode[];
   findings: BoardNode[];
   inbox: BoardNode[];
   selectedId: string | null;
+  visibleIds?: ReadonlySet<string>;
   counts: { nodes: number; edges: number; risk: number; open: number; candidates: number };
   onSelect: (id: string) => void;
   onSearch: () => void;
@@ -29,7 +31,7 @@ type Props = {
   results: BoardNode[] | null;
 };
 
-export function Sidebar({ current, openItems, findings, inbox, selectedId, counts, onSelect, onSearch, onShortcuts, filter, onFilter, filterOptions, results }: Props) {
+export function Sidebar({ current, goals = [], openItems, findings, inbox, selectedId, visibleIds, counts, onSelect, onSearch, onShortcuts, filter, onFilter, filterOptions, results }: Props) {
   return (
     <div className="flex h-full w-full flex-col" aria-label={t('sidebar.label')}>
       <div className="flex gap-2 p-3 pb-2">
@@ -50,22 +52,27 @@ export function Sidebar({ current, openItems, findings, inbox, selectedId, count
             </div>
             <div className="flex flex-col gap-px pt-0.5">
               {results.length
-                ? results.map((node) => <Row key={node.id} node={node} selected={selectedId === node.id} current={node.id === current?.id} onSelect={onSelect} />)
+                ? results.map((node) => <Row key={node.id} node={node} selected={selectedId === node.id} current={node.id === current?.id} offView={visibleIds ? !visibleIds.has(node.id) : false} onSelect={onSelect} />)
                 : <Empty>{t('sidebar.noMatch')}</Empty>}
             </div>
           </>
         ) : (<>
         <Section title={t('sidebar.focus')} count={current ? 1 : 0}>
-          {current ? <Row node={current} selected={selectedId === current.id} current onSelect={onSelect} /> : <Empty>{t('sidebar.noCursor')}</Empty>}
+          {current ? <Row node={current} selected={selectedId === current.id} current offView={visibleIds ? !visibleIds.has(current.id) : false} onSelect={onSelect} /> : <Empty>{t('sidebar.noCursor')}</Empty>}
         </Section>
+        {goals.length > 0 && (
+          <Section title={t('sidebar.goals')} count={goals.length}>
+            <NodeRows nodes={goals} limit={6} selectedId={selectedId} visibleIds={visibleIds} onSelect={onSelect} />
+          </Section>
+        )}
         <Section title={t('sidebar.open')} count={openItems.length}>
-          {openItems.length ? <NodeRows nodes={openItems} limit={8} selectedId={selectedId} onSelect={onSelect} /> : <Empty>{t('sidebar.noOpen')}</Empty>}
+          {openItems.length ? <NodeRows nodes={openItems} limit={8} selectedId={selectedId} visibleIds={visibleIds} onSelect={onSelect} /> : <Empty>{t('sidebar.noOpen')}</Empty>}
         </Section>
         <Section title={t('sidebar.findings')} count={findings.length}>
-          {findings.length ? <NodeRows nodes={findings} limit={8} selectedId={selectedId} onSelect={onSelect} /> : <Empty>{t('sidebar.noFindings')}</Empty>}
+          {findings.length ? <NodeRows nodes={findings} limit={8} selectedId={selectedId} visibleIds={visibleIds} onSelect={onSelect} /> : <Empty>{t('sidebar.noFindings')}</Empty>}
         </Section>
         <Section title={t('sidebar.inbox')} count={inbox.length} defaultOpen={false}>
-          <NodeRows nodes={inbox} limit={10} selectedId={selectedId} onSelect={onSelect} />
+          <NodeRows nodes={inbox} limit={10} selectedId={selectedId} visibleIds={visibleIds} onSelect={onSelect} />
         </Section>
         </>)}
       </nav>
@@ -84,8 +91,8 @@ export function Sidebar({ current, openItems, findings, inbox, selectedId, count
 }
 
 /** Keep the compact first page, but make every remaining record explicitly reachable. */
-function NodeRows({ nodes, limit, selectedId, onSelect }: { nodes: BoardNode[]; limit: number; selectedId: string | null; onSelect: (id: string) => void }) {
-  const row = (node: BoardNode) => <Row key={node.id} node={node} selected={selectedId === node.id} onSelect={onSelect} />;
+function NodeRows({ nodes, limit, selectedId, visibleIds, onSelect }: { nodes: BoardNode[]; limit: number; selectedId: string | null; visibleIds?: ReadonlySet<string>; onSelect: (id: string) => void }) {
+  const row = (node: BoardNode) => <Row key={node.id} node={node} selected={selectedId === node.id} offView={visibleIds ? !visibleIds.has(node.id) : false} onSelect={onSelect} />;
   return <>
     {nodes.slice(0, limit).map(row)}
     {nodes.length > limit && <details className="group/more">
@@ -111,7 +118,7 @@ function Section({ title, count, defaultOpen = true, children }: { title: string
   );
 }
 
-function Row({ node, current = false, selected, onSelect }: { node: BoardNode; current?: boolean; selected: boolean; onSelect: (id: string) => void }) {
+function Row({ node, current = false, selected, offView = false, onSelect }: { node: BoardNode; current?: boolean; selected: boolean; offView?: boolean; onSelect: (id: string) => void }) {
   return (
     <button
       onClick={() => onSelect(node.id)}
@@ -122,9 +129,9 @@ function Row({ node, current = false, selected, onSelect }: { node: BoardNode; c
         selected && 'bg-accent',
       )}
     >
-      <TypeDot type={node.type} className="mt-[7px]" />
+      <TypeDot type={node.type} className={cn('mt-[7px]', offView && 'opacity-60')} />
       <span className="min-w-0 flex-1">
-        <span className="line-clamp-2 text-[13px] leading-5 text-foreground">{presentNode(node).headline}</span>
+        <span className={cn('line-clamp-2 text-[13px] leading-5 text-foreground', offView && 'text-foreground/75')}>{presentNode(node).headline}</span>
         <span className="flex flex-wrap items-center gap-1.5 text-[11px] leading-4 text-muted-foreground">
           {typeLabel(node.type)}
           {node.severity && <SeverityBadge severity={node.severity} />}
@@ -132,6 +139,7 @@ function Row({ node, current = false, selected, onSelect }: { node: BoardNode; c
           {node.confidence && <span>· {confidenceLabel(node.confidence)}</span>}
         </span>
       </span>
+      {offView && <i className="mt-2 size-1.5 shrink-0 rounded-full bg-strong/70" title={t('sidebar.offView')} aria-label={t('sidebar.offView')} />}
       {current && <Crosshair className="mt-1 size-3.5 shrink-0 text-live" />}
     </button>
   );

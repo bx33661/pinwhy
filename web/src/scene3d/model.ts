@@ -8,6 +8,11 @@ export const UNIT = 100;
 /** The colour token behind plated metal: pins, mounting holes. */
 export const GOLD = '--rel-produce';
 
+export const CAMERA_PRESETS = {
+  iso: { polar: 0.78, azimuth: -0.38 },
+  top: { polar: 0.14, azimuth: 0 },
+} as const;
+
 /** Chip height by recorded severity. Unset stays a thin die; an unknown authored level is not ranked. */
 const CHIP_HEIGHT: Record<'low' | 'medium' | 'high' | 'critical', number> = { low: 0.3, medium: 0.5, high: 0.8, critical: 1.2 };
 const UNSET_HEIGHT = 0.14;
@@ -290,4 +295,113 @@ export function traceArrowhead(points: [number, number, number][], reversed: boo
     };
   }
   return null;
+}
+
+/**
+ * Word-aware mixed CJK + Latin wrapper: keeps Latin identifiers and paths intact across line
+ * breaks while wrapping CJK characters cleanly, only splitting an oversized token if it cannot
+ * fit on an empty line by itself.
+ */
+export function wrapText(text: string, width: number, lines: number, measure: (sample: string) => number): string[] {
+  if (!text || lines <= 0 || width <= 0) return [];
+  const tokens = text.match(/[A-Za-z0-9_./:@+-]+|\r?\n|[ \t]+|./gu) ?? [];
+  const out: string[] = [];
+  let line = '';
+  let truncated = false;
+
+  const pushLine = (value: string) => {
+    out.push(value.trimEnd());
+    return out.length === lines;
+  };
+  const hasVisibleRest = (from: number) => tokens.slice(from).some((rest) => !/^\s+$/.test(rest));
+
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    if (token === '\n' || token === '\r\n') {
+      if (pushLine(line)) {
+        line = '';
+        truncated = hasVisibleRest(i + 1);
+        break;
+      }
+      line = '';
+      continue;
+    }
+    const isSpace = /^[ \t]+$/.test(token);
+    if (!line && isSpace) continue;
+    const candidate = line + token;
+    if (measure(candidate) <= width) {
+      line = candidate;
+      continue;
+    }
+    if (isSpace) {
+      if (pushLine(line)) {
+        line = '';
+        truncated = hasVisibleRest(i + 1);
+        break;
+      }
+      line = '';
+      continue;
+    }
+    if (line) {
+      if (pushLine(line)) {
+        line = '';
+        truncated = true;
+        break;
+      }
+      line = '';
+    }
+    if (measure(token) <= width) {
+      line = token;
+      continue;
+    }
+    let broken = false;
+    for (const ch of token) {
+      if (line && measure(line + ch) > width) {
+        if (pushLine(line)) {
+          line = '';
+          truncated = true;
+          broken = true;
+          break;
+        }
+        line = ch;
+      } else {
+        line += ch;
+      }
+    }
+    if (broken) break;
+  }
+
+  if (!truncated && line.trimEnd() && out.length < lines) {
+    out.push(line.trimEnd());
+  } else if (truncated && out.length === lines) {
+    let last = out[lines - 1];
+    while (last && measure(`${last}…`) > width) last = last.slice(0, -1);
+    out[lines - 1] = `${last}…`;
+  }
+  return out;
+}
+
+/** Closed XZ rounded-rectangle perimeter matching a chip package's corner radius. */
+export function roundedRectPoints(w: number, d: number, r: number, y: number, segments = 5): [number, number, number][] {
+  const hw = w / 2, hd = d / 2;
+  const radius = Math.max(0, Math.min(r, hw, hd));
+  if (radius < 1e-4) {
+    return [[-hw, y, -hd], [hw, y, -hd], [hw, y, hd], [-hw, y, hd], [-hw, y, -hd]];
+  }
+  const ix = hw - radius, iz = hd - radius;
+  const corners: [number, number, number][] = [
+    [ix, -iz, -Math.PI / 2],
+    [ix, iz, 0],
+    [-ix, iz, Math.PI / 2],
+    [-ix, -iz, Math.PI],
+  ];
+  const points: [number, number, number][] = [];
+  for (const [cx, cz, start] of corners) {
+    for (let s = 0; s <= segments; s++) {
+      const angle = start + (s / segments) * (Math.PI / 2);
+      points.push([cx + Math.cos(angle) * radius, y, cz + Math.sin(angle) * radius]);
+    }
+  }
+  if (points.length) points.push([...points[0]]);
+  return points;
 }

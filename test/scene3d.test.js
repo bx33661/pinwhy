@@ -17,7 +17,7 @@ for (const entry of fs.readdirSync(dir, { recursive: true }).filter((name) => na
 }
 fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ type: 'module' }));
 fs.symlinkSync(path.join(root, 'node_modules'), path.join(dir, 'node_modules'), 'dir');
-const { boardBounds, bootDepths, chamfer, chipHeight, homeFrame, ratedSeverity, resample, ribbonStrip, sceneTraces, shapeKey, traceArrowhead, traceCourse, tracesKey, visibleTraces } = await import(pathToFileURL(path.join(dir, 'scene3d/model.js')).href);
+const { CAMERA_PRESETS, boardBounds, bootDepths, chamfer, chipHeight, homeFrame, ratedSeverity, resample, ribbonStrip, roundedRectPoints, sceneTraces, shapeKey, traceArrowhead, traceCourse, tracesKey, visibleTraces, wrapText } = await import(pathToFileURL(path.join(dir, 'scene3d/model.js')).href);
 
 const W = 2.88, D = 1.28;
 /** x and z are the chip's centre, as sceneLayout places it. */
@@ -209,4 +209,58 @@ test('the board extends past the chips on every side and stays centred', () => {
   assert.ok(outer.w > inner.w && outer.d > inner.d);
   assert.ok(Math.abs((outer.w - inner.w) - (outer.d - inner.d)) < 1e-9);
   assert.deepEqual([outer.cx, outer.cz], [2, 3]);
+});
+
+test('wrapText keeps Latin words and paths whole, wraps CJK cleanly, and adds ellipsis on overflow', () => {
+  const measure = (text) => text.length;
+  assert.deepEqual(
+    wrapText('Export checks team role without tenant', 16, 3, measure),
+    ['Export checks', 'team role', 'without tenant'],
+  );
+  assert.deepEqual(
+    wrapText('Export checks team role without tenant', 16, 2, measure),
+    ['Export checks', 'team role…'],
+  );
+  assert.deepEqual(
+    wrapText('导出接口检查团队角色但未校验对象', 6, 3, measure),
+    ['导出接口检查', '团队角色但未', '校验对象'],
+  );
+  const broken = wrapText('src/routes/admin/exportJobController.ts', 12, 2, measure);
+  assert.equal(broken.length, 2);
+  assert.ok(broken.every((line) => measure(line) <= 12));
+  assert.ok(broken[1].endsWith('…'));
+});
+
+test('both iso and top camera presets frame the whole board inside the viewport', () => {
+  const bounds = { cx: 2, cz: 1, w: 18, d: 10, radius: 10.3 };
+  const fov = 38, aspect = 1.6, top = 3;
+  for (const name of ['iso', 'top']) {
+    const preset = CAMERA_PRESETS[name];
+    assert.ok(preset, name);
+    const { position, target } = homeFrame(bounds, top, aspect, fov, preset.polar, preset.azimuth);
+    const sub = (a, b) => a.map((value, i) => value - b[i]);
+    const dot = (a, b) => a.reduce((sum, value, i) => sum + value * b[i], 0);
+    const forward = sub(target, position), length = Math.hypot(...forward);
+    const f = forward.map((value) => value / length);
+    const flat = Math.hypot(f[0], f[2]), right = [-f[2] / flat, 0, f[0] / flat];
+    const up = [right[1] * f[2] - right[2] * f[1], right[2] * f[0] - right[0] * f[2], right[0] * f[1] - right[1] * f[0]];
+    const tan = Math.tan((fov / 2) * Math.PI / 180);
+    for (const x of [-bounds.w / 2, bounds.w / 2]) for (const z of [-bounds.d / 2, bounds.d / 2]) for (const y of [0, top]) {
+      const offset = sub([bounds.cx + x, y, bounds.cz + z], position), depth = dot(offset, f);
+      assert.ok(Math.abs(dot(offset, right) / depth / (tan * aspect)) < 1, `${name} x overflow`);
+      assert.ok(Math.abs(dot(offset, up) / depth / tan) < 1, `${name} y overflow`);
+    }
+  }
+});
+
+test('roundedRectPoints produces a closed finite perimeter matching the requested bounds', () => {
+  const pts = roundedRectPoints(3, 1.4, 0.06, 0.5);
+  assert.ok(pts.length > 8);
+  assert.deepEqual(pts[0], pts.at(-1));
+  for (const [x, y, z] of pts) {
+    assert.ok(Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z));
+    assert.equal(y, 0.5);
+    assert.ok(Math.abs(x) <= 1.5 + 1e-9);
+    assert.ok(Math.abs(z) <= 0.7 + 1e-9);
+  }
 });

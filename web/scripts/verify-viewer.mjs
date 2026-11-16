@@ -216,6 +216,7 @@ async function verify() {
 
   const graphBeforeLink = replay(board); const eventsBeforeLink = readEvents(board).events.length;
   const connect = inspector.getByRole('region', { name: '关联已有节点' });
+  await connect.getByRole('button', { name: '关联已有节点', exact: true }).click();
   await connect.getByLabel('搜索已有节点', { exact: true }).fill('Old support');
   await connect.getByLabel('选择已有节点', { exact: true }).selectOption(evidence.id);
   assert.match(await connect.getByLabel('方向预览', { exact: true }).innerText(), new RegExp(`${hypothesis.id}.*${evidence.id}`));

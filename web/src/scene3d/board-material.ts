@@ -8,6 +8,7 @@ uniform vec3 uInk;
 uniform float uPitch;
 uniform float uGrid;
 uniform float uGlow;
+uniform float uFalloff;
 uniform vec3 uPool;
 uniform vec3 uScan;
 uniform vec3 uScanColor;
@@ -34,17 +35,23 @@ export function boardMaterial(palette: Palette, dark: boolean, scanColor: Color,
   const scan = { value: new Vector3() };
   const scanPower = { value: 0 };
   const uniforms = {
-    uBase: { value: new Color(palette.css(dark ? 'color-mix(in srgb, var(--node-goal) 9%, var(--bg))' : 'color-mix(in srgb, var(--surface) 90%, var(--node-goal))')) },
-    uInk: { value: palette.color(dark ? 'color-mix(in srgb, var(--ink-3) 60%, var(--ink))' : 'color-mix(in srgb, var(--node-goal) 38%, var(--surface))') },
+    uBase: { value: new Color(palette.css(dark ? 'color-mix(in srgb, #0d261e 34%, var(--bg))' : 'color-mix(in srgb, var(--surface) 96%, var(--node-goal))')) },
+    uInk: { value: palette.color(dark ? 'color-mix(in srgb, #3fd1c0 28%, var(--ink-3))' : 'color-mix(in srgb, var(--ink-3) 42%, var(--line-strong))') },
     uPitch: { value: 0.48 },
     uGrid: { value: 2.88 },
-    uGlow: { value: dark ? 0.2 : 0 },
-    uPool: { value: new Vector3(cx, cz, radius) },
+    uGlow: { value: dark ? 0.26 : 0 },
+    uFalloff: { value: dark ? 0.38 : 0.1 },
+    uPool: { value: new Vector3(cx, cz, Math.max(1, radius)) },
     uScan: scan,
     uScanColor: { value: scanColor },
     uScanPower: scanPower,
   };
-  const material = new MeshPhysicalMaterial({ roughness: dark ? 0.55 : 0.7, metalness: dark ? 0.2 : 0, clearcoat: dark ? 0.7 : 0.35, clearcoatRoughness: 0.5 });
+  const material = new MeshPhysicalMaterial({
+    roughness: dark ? 0.46 : 0.72,
+    metalness: dark ? 0.22 : 0,
+    clearcoat: dark ? 0.5 : 0.32,
+    clearcoatRoughness: dark ? 0.36 : 0.48,
+  });
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
@@ -60,7 +67,7 @@ export function boardMaterial(palette: Palette, dark: boolean, scanColor: Color,
         vec2 coarse = vXZ / uGrid;
         float mark = max(pad * 0.4, max(gridLine(coarse.x, 0.8), gridLine(coarse.y, 0.8)) * 0.07);
         float sweep = uScanPower * (1.0 - smoothstep(0.0, 0.9, abs(distance(vXZ, uScan.xy) - uScan.z)));
-        float pool = 1.0 - 0.5 * smoothstep(0.35, 1.2, distance(vXZ, uPool.xy) / uPool.z);
+        float pool = 1.0 - uFalloff * smoothstep(0.35, 1.2, distance(vXZ, uPool.xy) / max(uPool.z, 0.001));
         diffuseColor.rgb = mix(uBase, uInk, mark * (1.0 - uGlow)) * pool;`)
       .replace('#include <emissivemap_fragment>', /* glsl */ `#include <emissivemap_fragment>
         totalEmissiveRadiance += uInk * mark * uGlow * pool + uScanColor * sweep * (mark * 3.0 + 0.02);`);
