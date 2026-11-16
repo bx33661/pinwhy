@@ -33,6 +33,8 @@
     "site:dev": "npm --prefix site run dev",
     "site:build": "npm --prefix site run build",
     "serve": "node bin/pinwhy.js serve",
+    "demo:audit": "node scripts/seed-audit-demo.mjs",
+    "demo:audit:serve": "node bin/pinwhy.js serve --cwd test/fixtures/audit-demo-board --open",
     "export": "node bin/pinwhy.js export",
     "check": "npm run check:types && npm run check:docs && npm run check:publish",
     "check:types": "tsc --noEmit",

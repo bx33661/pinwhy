@@ -10,8 +10,8 @@ node_modules/
 # Keep pre-rename local data private until explicitly migrated.
 .blackboard/
 .flow/
-.demo/
-demo/
+/.demo/
+/demo/
 pinwhy.html
 blackboard.html
 
