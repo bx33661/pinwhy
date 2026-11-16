@@ -49,7 +49,7 @@ export function TypeDot({ type, className }: { type: string; className?: string 
 const handleClass = 'size-1! min-h-0! min-w-0! border-0! bg-transparent! opacity-0! pointer-events-none!';
 
 export const SecurityNode = memo(function SecurityNode({ data, selected }: NodeProps<CanvasNode>) {
-  const { item, current, dimmed, direction, compact, muted, hoverMuted, hoverPeer, fresh, agents, change, changeFields } = data;
+  const { item, current, dimmed, direction, compact, muted, hoverMuted, hoverPeer, entering, enterOrder, fresh, agents, change, changeFields } = data;
   const level = useStore((state) => detailLevel(state.transform[2]));
   const vertical = direction === 'DOWN';
   const text = presentNode(item);
@@ -65,8 +65,9 @@ export const SecurityNode = memo(function SecurityNode({ data, selected }: NodeP
   return (
     <BaseNode
       tabIndex={-1}
-      style={{ '--c': `var(--node-${item.type in DOT_CLASS ? item.type : 'note'})` } as CSSProperties}
+      style={{ '--c': `var(--node-${item.type in DOT_CLASS ? item.type : 'note'})`, '--enter-order': enterOrder ?? 0 } as CSSProperties}
       data-detail-level={level}
+      data-entering={entering ? 'true' : undefined}
       data-severe={severe && !retired ? 'true' : undefined}
       title={change === 'added' ? `${t('node.changeAdded')}\n${t('node.previewHint')}` : change === 'updated' ? `${t('node.changeUpdated', { fields: (changeFields || []).join(', ') })}\n${t('node.previewHint')}` : t('node.previewHint')}
       aria-label={`${typeLabel(item.type)}：${item.title}${state ? ` · ${state}` : ''}`}

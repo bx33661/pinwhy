@@ -335,7 +335,7 @@ test('large boards trade network-simplex placement for one that stays fast',()=>
  assert.ok(Number(placementFor(2000)['elk.layered.thoroughness']) < Number(placementFor(40)['elk.layered.thoroughness']));
 });
 
-const { matchLocale } = await import(pathToFileURL(path.join(dir,'i18n.js')).href);
+const { matchLocale, t } = await import(pathToFileURL(path.join(dir,'i18n.js')).href);
 const catalogues = Object.fromEntries(await Promise.all(['zh-CN','zh-HK','en','ja'].map(async (id) => {
  const mod = await import(pathToFileURL(path.join(dir,'locales',`${id}.js`)).href);
  return [id, Object.values(mod)[0]];
@@ -357,4 +357,9 @@ test('every language carries every message with the same placeholders',()=>{
    assert.ok(messages[key].trim(), `${id} ${key} is empty`);
   }
  }
+});
+test('peek connection hint pluralizes and interpolates connection counts cleanly',()=>{
+ assert.equal(catalogues.en['peek.connections'].split('|').length, 2);
+ assert.equal(t('peek.connections', { n: 1 }), '1 条关联 · 双击聚焦邻域');
+ assert.equal(t('peek.connections', { n: 4 }), '4 条关联 · 双击聚焦邻域');
 });

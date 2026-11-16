@@ -1,6 +1,6 @@
 import { useEffect, useState, type CSSProperties, type ReactNode, type Ref } from 'react';
 import { Collapsible } from 'radix-ui';
-import { Check, ArrowDownLeft, ArrowUpRight, ChevronRight, Copy, Link2, Loader2, MessageSquareQuote, Unlink, X } from 'lucide-react';
+import { Check, ArrowDownLeft, ArrowUpRight, ChevronRight, Copy, Link2, Loader2, MessageSquareQuote, ScanSearch, Unlink, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { IconButton } from '@/components/icon-button';
 import { Kbd } from '@/components/ui/kbd';
@@ -32,6 +32,7 @@ type Props = HistoryAvailability & {
   byId: Map<string, BoardNode>;
   onClose: () => void;
   onFocus: (id: string) => void;
+  onFocusNeighborhood?: () => void;
   onCopyLink?: () => void;
   linkCopied?: boolean;
   /** Only a framed host configured with `reference=1` offers this. */
@@ -55,7 +56,7 @@ function renderInlineCode(text: string): ReactNode {
   ));
 }
 
-export function Inspector({ node, edges, byId, onClose, onFocus, onCopyLink, linkCopied, reference, writable, onReload, isStatic, connected, revision, panelRef }: Props) {
+export function Inspector({ node, edges, byId, onClose, onFocus, onFocusNeighborhood, onCopyLink, linkCopied, reference, writable, onReload, isStatic, connected, revision, panelRef }: Props) {
   const [width, setWidth] = usePref('inspector-width', 380);
   const [idCopied, setIdCopied] = useState(false);
   useEffect(() => { setIdCopied(false); }, [node.id]);
@@ -117,7 +118,7 @@ export function Inspector({ node, edges, byId, onClose, onFocus, onCopyLink, lin
       ref={panelRef}
       aria-label={t('inspector.label')}
       style={{ '--inspector-w': `${panelWidth}px` } as CSSProperties}
-      className="anim-slide-in absolute inset-x-3 bottom-3 top-auto z-20 flex max-h-[62%] flex-col rounded-xl border bg-card shadow-float sm:inset-x-auto sm:right-3 sm:top-3 sm:max-h-none sm:w-[min(var(--inspector-w),calc(100%-24px))]"
+      className="anim-slide-in absolute inset-x-3 bottom-3 top-auto z-20 flex max-h-[62%] flex-col rounded-xl border bg-card/92 shadow-float backdrop-blur-md sm:inset-x-auto sm:right-3 sm:top-3 sm:max-h-none sm:w-[min(var(--inspector-w),calc(100%-24px))]"
     >
       <div
         role="separator"
@@ -175,6 +176,7 @@ export function Inspector({ node, edges, byId, onClose, onFocus, onCopyLink, lin
             {referenceStatus === 'pending' ? <Loader2 className="animate-spin" /> : referenceStatus === 'done' ? <Check /> : <MessageSquareQuote />}
           </IconButton>
         )}
+        {onFocusNeighborhood && <IconButton label={t('toolbar.focusNeighborhood')} shortcut="Z" onClick={onFocusNeighborhood}><ScanSearch /></IconButton>}
         {onCopyLink && <IconButton label={linkCopied ? t('inspector.linkCopied') : t('inspector.copyLink')} onClick={onCopyLink}>{linkCopied ? <Check /> : <Link2 />}</IconButton>}
         <Kbd className="hidden sm:inline-flex">Esc</Kbd>
         <IconButton label={t('inspector.close')} onClick={onClose}><X /></IconButton>
@@ -192,6 +194,7 @@ export function Inspector({ node, edges, byId, onClose, onFocus, onCopyLink, lin
       )}
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+        <div key={node.id} className="anim-node-swap">
         <InputIntegrityNotice record={node} />
         <h2 className="m-0 whitespace-pre-wrap text-[17px] font-semibold leading-snug tracking-[-0.01em] [overflow-wrap:anywhere]">{node.title.trim() ? node.title : t('node.untitled')}</h2>
         {node.detail && <p className="mt-2 mb-0 whitespace-pre-wrap text-[13px] leading-[22px] text-subtle [overflow-wrap:anywhere]">{renderInlineCode(node.detail)}</p>}
@@ -267,6 +270,7 @@ export function Inspector({ node, edges, byId, onClose, onFocus, onCopyLink, lin
             <pre className="mt-2 mb-0 max-h-64 overflow-auto rounded-lg border bg-secondary p-3 font-mono text-[11px] leading-[18px] text-subtle">{JSON.stringify(node, null, 2)}</pre>
           </Collapsible.Content>
         </Collapsible.Root>
+        </div>
       </div>
     </aside>
   );

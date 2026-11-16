@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
-import { getNodesBounds, getViewportForBounds, useNodesInitialized, useReactFlow } from '@xyflow/react';
-import { frameStrategy, pickFocus } from '../canvas-state';
+import { getNodesBounds, getViewportForBounds, useNodesInitialized, useReactFlow, type Edge } from '@xyflow/react';
+import { focusedIds, frameStrategy, pickFocus } from '../canvas-state';
 import { NODE_H, NODE_W, type CanvasNode } from '../graph';
 import type { ViewMode } from '../types';
 
@@ -17,7 +17,7 @@ type Options = {
 /** Framing and following move the reader's viewport, never the recorded agent cursor. */
 export function useWorkspaceViewport({ viewportRef, pendingFocus, layoutRevision, mode, follow, currentId, selectedId }: Options) {
   const initialized = useNodesInitialized();
-  const { fitView, getNode, getNodes, setCenter } = useReactFlow<CanvasNode>();
+  const { fitView, getNode, getNodes, setCenter, setViewport } = useReactFlow<CanvasNode>();
   const framedRevision = useRef(0);
   const lastCurrent = useRef<string | null>(null);
   const live = useRef({ follow: false, currentId: null as string | null, selectedId: null as string | null });
@@ -86,5 +86,27 @@ export function useWorkspaceViewport({ viewportRef, pendingFocus, layoutRevision
     fitView({ padding: .14, duration: motion });
   }, [fitView, motion]);
 
-  return { centerOnNode, fitCanvas, motion };
+  const focusNeighborhood = useCallback((id: string, currentEdges: Edge[]) => {
+    const ids = focusedIds(id, currentEdges);
+    const all = getNodes();
+    const byNodeId = new Map(all.map((node) => [node.id, node]));
+    const targets = all
+      .filter((node) => !node.data.group && ids.has(node.id))
+      .map((node) => {
+        const parent = node.parentId ? byNodeId.get(node.parentId) : null;
+        return parent ? { ...node, position: { x: node.position.x + parent.position.x, y: node.position.y + parent.position.y } } : node;
+      });
+    if (targets.length <= 1) {
+      centerOnNode(id, true, motion);
+      return;
+    }
+    const box = viewportRef.current;
+    const width = box?.clientWidth || 900;
+    const height = box?.clientHeight || 640;
+    const overlay = width >= 640 ? Math.min(430, width * 0.48) : 0;
+    const vp = getViewportForBounds(getNodesBounds(targets), Math.max(240, width - overlay), height, 0.22, 0.96, 0.18);
+    setViewport(vp, { duration: motion });
+  }, [getNodes, centerOnNode, motion, viewportRef, setViewport]);
+
+  return { centerOnNode, fitCanvas, focusNeighborhood, motion };
 }

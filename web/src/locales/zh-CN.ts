@@ -167,7 +167,7 @@ export const zhCN = {
   'shortcuts.navigation': '导航', 'shortcuts.search': '搜索节点与命令', 'shortcuts.sidebar': '展开或收起侧栏',
   'shortcuts.help': '显示这份快捷键', 'shortcuts.escape': '取消选中 / 关闭面板',
   'shortcuts.canvas': '画布', 'shortcuts.arrows': '沿关系跳到相邻节点', 'shortcuts.tab': '在节点间移动焦点',
-  'shortcuts.enter': '选中焦点节点', 'shortcuts.fit': '适应画布', 'shortcuts.locate': '定位当前节点', 'shortcuts.minimap': '显示或隐藏小地图', 'shortcuts.zoomPan': '缩放 / 平移',
+  'shortcuts.enter': '选中焦点节点', 'shortcuts.fit': '适应画布', 'shortcuts.locate': '定位当前节点', 'shortcuts.neighborhood': '聚焦选中或当前节点的一跳邻域', 'shortcuts.minimap': '显示或隐藏小地图', 'shortcuts.zoomPan': '缩放 / 平移',
   'shortcuts.wheel': '滚轮', 'shortcuts.drag': '拖动',
 
   'inspector.label': '节点详情',
@@ -237,7 +237,8 @@ export const zhCN = {
   'edit.newDialog': '新建节点',
   'edit.newDescription': '不与其他节点相连；选中节点后可以在详情里添加相关节点。',
 
-  'toolbar.fit': '适应画布', 'toolbar.locate': '定位当前节点',
+  'toolbar.fit': '适应画布', 'toolbar.locate': '定位当前节点', 'toolbar.focusNeighborhood': '聚焦一跳邻域',
+  'peek.connections': '{n} 条关联 · 双击聚焦邻域',
   'toolbar.followDisabled': '跟随 Agent（全局视图下不可用）', 'toolbar.unfollow': '停止跟随 Agent', 'toolbar.follow': '跟随 Agent 游标',
   'toolbar.toVertical': '切换为纵向布局', 'toolbar.toHorizontal': '切换为横向布局',
   'toolbar.hideLegend': '隐藏图例', 'toolbar.showLegend': '显示图例',

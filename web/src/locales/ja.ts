@@ -161,7 +161,7 @@ export const ja: Messages = {
   'shortcuts.navigation': 'ナビゲーション', 'shortcuts.search': 'ノードとコマンドを検索', 'shortcuts.sidebar': 'サイドバーの表示を切り替え',
   'shortcuts.help': 'このショートカット一覧を表示', 'shortcuts.escape': '選択解除 / パネルを閉じる',
   'shortcuts.canvas': 'キャンバス', 'shortcuts.arrows': '関係をたどって隣のノードへ移動', 'shortcuts.tab': 'ノード間でフォーカスを移動',
-  'shortcuts.enter': 'フォーカス中のノードを選択', 'shortcuts.fit': '画面に合わせる', 'shortcuts.locate': '現在のノードへ移動', 'shortcuts.minimap': 'ミニマップの表示を切り替え', 'shortcuts.zoomPan': 'ズーム / パン',
+  'shortcuts.enter': 'フォーカス中のノードを選択', 'shortcuts.fit': '画面に合わせる', 'shortcuts.locate': '現在のノードへ移動', 'shortcuts.neighborhood': '選択中または現在ノードの1ホップ近傍を表示', 'shortcuts.minimap': 'ミニマップの表示を切り替え', 'shortcuts.zoomPan': 'ズーム / パン',
   'shortcuts.wheel': 'ホイール', 'shortcuts.drag': 'ドラッグ',
 
   'inspector.label': 'ノードの詳細',
@@ -238,7 +238,8 @@ export const ja: Messages = {
   'edit.newDialog': '新しいノード',
   'edit.newDescription': 'どのノードともつながっていない状態で作成されます。ノードを選択すると詳細から関連ノードを追加できます。',
 
-  'toolbar.fit': '画面に合わせる', 'toolbar.locate': '現在のノードへ移動',
+  'toolbar.fit': '画面に合わせる', 'toolbar.locate': '現在のノードへ移動', 'toolbar.focusNeighborhood': '1ホップ近傍にフォーカス',
+  'peek.connections': '{n} 件の関係 · ダブルクリックで近傍表示',
   'toolbar.followDisabled': 'Agent を追従（全体ビューでは使用不可）', 'toolbar.unfollow': 'Agent の追従を停止', 'toolbar.follow': 'Agent のカーソルを追従',
   'toolbar.toVertical': '縦方向のレイアウトに切り替え', 'toolbar.toHorizontal': '横方向のレイアウトに切り替え',
   'toolbar.hideLegend': '凡例を隠す', 'toolbar.showLegend': '凡例を表示',

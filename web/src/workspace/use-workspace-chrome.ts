@@ -88,6 +88,7 @@ type CanvasActions = {
   enabled: boolean;
   onFit: () => void;
   onLocate?: () => void;
+  onNeighborhood?: () => void;
   onToggleMap: () => void;
 };
 
@@ -116,6 +117,9 @@ export function useWorkspaceShortcuts(clearSelection: () => void, setPaletteOpen
         } else if (actions?.enabled && lower === 'c' && actions.onLocate) {
           event.preventDefault();
           actions.onLocate();
+        } else if (actions?.enabled && lower === 'z' && actions.onNeighborhood) {
+          event.preventDefault();
+          actions.onNeighborhood();
         } else if (actions?.enabled && lower === 'm') {
           event.preventDefault();
           actions.onToggleMap();

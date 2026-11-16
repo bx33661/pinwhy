@@ -25,6 +25,7 @@ export function useWorkspacePresentation(nodes: CanvasNode[], edges: Edge[], sel
       // Dragging replaces the source object: its new position must reach React Flow.
       if (hit && hit.source === node && hit.built.selected === selected && hit.built.data.muted === muted
         && hit.built.data.hoverMuted === hoverMuted && hit.built.data.hoverPeer === hoverPeer
+        && hit.built.data.entering === node.data.entering && hit.built.data.enterOrder === node.data.enterOrder
         && hit.built.data.fresh === freshFlag && hit.built.data.change === change?.kind && hit.built.data.changeFields === change?.fields) return hit.built;
       return { ...node, selected, data: { ...node.data, muted, hoverMuted, hoverPeer, fresh: freshFlag, change: change?.kind, changeFields: change?.fields } };
     });

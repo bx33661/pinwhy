@@ -57,7 +57,7 @@ export function useWorkspaceSelection({ snapshot, byId, projection, nodes, edges
     }
   }, [snapshot, byId, selectedId, pendingFocus, setSelectedId]);
 
-  const focusNode = useCallback((id: string) => {
+  const focusNode = useCallback((id: string, center = true) => {
     if (focusFrame.current !== null) cancelAnimationFrame(focusFrame.current);
     if (keyboardFrame.current !== null) cancelAnimationFrame(keyboardFrame.current);
     setSelectedId(id);
@@ -67,7 +67,7 @@ export function useWorkspaceSelection({ snapshot, byId, projection, nodes, edges
       if (revealInGeneral) setMode('all');
     } else {
       pendingFocus.current = null;
-      focusFrame.current = requestAnimationFrame(() => { focusFrame.current = null; centerOnNode(id); });
+      if (center) focusFrame.current = requestAnimationFrame(() => { focusFrame.current = null; centerOnNode(id); });
     }
   }, [projection, centerOnNode, setSelectedId, closeSidebar, pendingFocus, setMode, revealInGeneral]);
 

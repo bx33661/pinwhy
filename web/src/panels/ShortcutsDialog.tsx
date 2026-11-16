@@ -23,6 +23,7 @@ function buildGroups(): { title: string; items: { keys: string[]; label: string 
         { keys: ['Enter', 'Space'], label: t('shortcuts.enter') },
         { keys: ['F'], label: t('shortcuts.fit') },
         { keys: ['C'], label: t('shortcuts.locate') },
+        { keys: ['Z'], label: t('shortcuts.neighborhood') },
         { keys: ['M'], label: t('shortcuts.minimap') },
         { keys: [t('shortcuts.wheel'), t('shortcuts.drag')], label: t('shortcuts.zoomPan') },
       ],

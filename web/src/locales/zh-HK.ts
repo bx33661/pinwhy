@@ -152,7 +152,7 @@ export const zhHK: Messages = {
   'shortcuts.navigation': '導覽', 'shortcuts.search': '搜尋節點與指令', 'shortcuts.sidebar': '展開或收合側欄',
   'shortcuts.help': '顯示這份快捷鍵', 'shortcuts.escape': '取消選取 / 關閉面板',
   'shortcuts.canvas': '畫布', 'shortcuts.arrows': '沿關係跳到相鄰節點', 'shortcuts.tab': '在節點間移動焦點',
-  'shortcuts.enter': '選取焦點節點', 'shortcuts.fit': '符合畫布', 'shortcuts.locate': '定位目前節點', 'shortcuts.minimap': '顯示或隱藏小地圖', 'shortcuts.zoomPan': '縮放 / 平移',
+  'shortcuts.enter': '選取焦點節點', 'shortcuts.fit': '符合畫布', 'shortcuts.locate': '定位目前節點', 'shortcuts.neighborhood': '聚焦選取或目前節點的一跳鄰域', 'shortcuts.minimap': '顯示或隱藏小地圖', 'shortcuts.zoomPan': '縮放 / 平移',
   'shortcuts.wheel': '滾輪', 'shortcuts.drag': '拖曳',
 
   'inspector.label': '節點詳情',
@@ -238,7 +238,8 @@ export const zhHK: Messages = {
   'edit.newDialog': '新增節點',
   'edit.newDescription': '不與其他節點相連；選取節點後可以在詳情中新增相關節點。',
 
-  'toolbar.fit': '符合畫布', 'toolbar.locate': '定位目前節點',
+  'toolbar.fit': '符合畫布', 'toolbar.locate': '定位目前節點', 'toolbar.focusNeighborhood': '聚焦一跳鄰域',
+  'peek.connections': '{n} 條關聯 · 雙擊聚焦鄰域',
   'toolbar.followDisabled': '跟隨 Agent（全域檢視下無法使用）', 'toolbar.unfollow': '停止跟隨 Agent', 'toolbar.follow': '跟隨 Agent 游標',
   'toolbar.toVertical': '切換為縱向版面', 'toolbar.toHorizontal': '切換為橫向版面',
   'toolbar.hideLegend': '隱藏圖例', 'toolbar.showLegend': '顯示圖例',

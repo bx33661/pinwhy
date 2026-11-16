@@ -162,7 +162,7 @@ export const en: Messages = {
   'shortcuts.navigation': 'Navigation', 'shortcuts.search': 'Search nodes and commands', 'shortcuts.sidebar': 'Show or hide the sidebar',
   'shortcuts.help': 'Show these shortcuts', 'shortcuts.escape': 'Deselect / close a panel',
   'shortcuts.canvas': 'Canvas', 'shortcuts.arrows': 'Jump to a connected node', 'shortcuts.tab': 'Move focus between nodes',
-  'shortcuts.enter': 'Select the focused node', 'shortcuts.fit': 'Fit canvas to screen', 'shortcuts.locate': 'Jump to current node', 'shortcuts.minimap': 'Show or hide minimap', 'shortcuts.zoomPan': 'Zoom / pan',
+  'shortcuts.enter': 'Select the focused node', 'shortcuts.fit': 'Fit canvas to screen', 'shortcuts.locate': 'Jump to current node', 'shortcuts.neighborhood': 'Frame selected or current 1-hop neighborhood', 'shortcuts.minimap': 'Show or hide minimap', 'shortcuts.zoomPan': 'Zoom / pan',
   'shortcuts.wheel': 'Wheel', 'shortcuts.drag': 'Drag',
 
   'inspector.label': 'Node details',
@@ -239,7 +239,8 @@ export const en: Messages = {
   'edit.newDialog': 'New node',
   'edit.newDescription': 'It starts unconnected. Select a node to add related ones from its details.',
 
-  'toolbar.fit': 'Fit to screen', 'toolbar.locate': 'Go to the current node',
+  'toolbar.fit': 'Fit to screen', 'toolbar.locate': 'Go to the current node', 'toolbar.focusNeighborhood': 'Focus 1-hop neighborhood',
+  'peek.connections': '{n} relation · double-click to frame|{n} relations · double-click to frame',
   'toolbar.followDisabled': 'Follow the Agent (not available in the overview)', 'toolbar.unfollow': 'Stop following the Agent', 'toolbar.follow': 'Follow the Agent’s cursor',
   'toolbar.toVertical': 'Switch to a vertical layout', 'toolbar.toHorizontal': 'Switch to a horizontal layout',
   'toolbar.hideLegend': 'Hide legend', 'toolbar.showLegend': 'Show legend',

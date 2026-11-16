@@ -47,10 +47,10 @@ export function TimelineBar({ points, position, active, loading, error, previous
 
   const delta = changes?.data;
   return (
-    <section data-timeline aria-label={t('timeline.heading')} onKeyDown={onKeyDown} className="shrink-0 border-t bg-background px-3 py-2">
+    <section data-timeline aria-label={t('timeline.heading')} onKeyDown={onKeyDown} className="anim-timeline-in shrink-0 border-t bg-background px-3 py-2">
       <div className="flex min-w-0 items-center gap-1">
         <IconButton label={t('timeline.prev')} disabled={!points.length || position === 0} onClick={() => { onPause(); onGoTo(position - 1); }}><ChevronLeft /></IconButton>
-        <IconButton label={playing ? t('timeline.pause') : t('timeline.play')} aria-pressed={playing} disabled={!points.length} onClick={playing ? onPause : onPlay}>{playing ? <Pause /> : <Play />}</IconButton>
+        <IconButton label={playing ? t('timeline.pause') : t('timeline.play')} aria-pressed={playing} disabled={!points.length} className={cn(playing && 'bg-live/12 text-live')} onClick={playing ? onPause : onPlay}>{playing ? <Pause /> : <Play />}</IconButton>
         <IconButton label={t('timeline.next')} disabled={!active} onClick={() => { onPause(); onGoTo(position + 1); }}><ChevronRight /></IconButton>
         <span className="mx-1 h-4 w-px shrink-0 bg-border" />
         {points.length === 0 ? (
@@ -61,7 +61,7 @@ export function TimelineBar({ points, position, active, loading, error, previous
               const selected = active && index === position;
               return (
                 <li key={point.id} className="flex shrink-0 items-center gap-1">
-                  {index > 0 && <i aria-hidden className={cn('h-px w-3', index <= position && active ? 'bg-foreground' : 'bg-strong')} />}
+                  {index > 0 && <i aria-hidden className={cn('h-0.5 w-3.5 rounded-full transition-colors duration-250', index <= position && active ? 'bg-foreground' : 'bg-strong')} />}
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <button
@@ -86,7 +86,7 @@ export function TimelineBar({ points, position, active, loading, error, previous
               );
             })}
             <li className="flex shrink-0 items-center gap-1">
-              <i aria-hidden className={cn('h-px w-3', active ? 'bg-strong' : 'bg-foreground')} />
+              <i aria-hidden className={cn('h-0.5 w-3.5 rounded-full transition-colors duration-250', active ? 'bg-strong' : 'bg-foreground')} />
               <button
                 type="button"
                 aria-current={!active ? 'step' : undefined}

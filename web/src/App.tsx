@@ -3,6 +3,7 @@ import { Background, BackgroundVariant, MiniMap, ReactFlow, ReactFlowProvider } 
 import { History } from 'lucide-react';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
+import type { CardTheme } from './card-themes';
 import { BoardGroup } from './BoardGroup';
 import { BrandMark } from './BrandMark';
 import { SecurityNode } from './SecurityNode';
@@ -10,6 +11,7 @@ import { RoutedEdge } from './RoutedEdge';
 import { formatTime, project, typeLabel as typeLabelOf, type CanvasNode } from './graph';
 import { EMPTY_FILTER, type NodeFilter } from './presentation';
 import { useGraphStream } from './use-graph-stream';
+import { CanvasPeekCard } from './panels/CanvasPeekCard';
 import { CanvasToolbar } from './panels/CanvasToolbar';
 import { CommandPalette } from './panels/CommandPalette';
 import { DigestDialog } from './panels/DigestDialog';
@@ -40,6 +42,7 @@ import type { BoardNode } from './types';
 import type { Scene3DProps } from './scene3d/shared';
 import { readPresentation } from './embedded';
 import { usePref } from './use-pref';
+import { runViewTransition } from './view-transition';
 
 const KNOWN_NODE_TYPES = new Set(['start', 'goal', 'intent', 'hypothesis', 'question', 'fact', 'observation', 'action', 'result', 'finding', 'vuln', 'hint', 'summary', 'note']);
 
@@ -70,6 +73,7 @@ function Workspace() {
   } = useWorkspaceChrome({ embedded: presentation.embedded, appearance: presentation.appearance, fonts: presentation.fonts });
   const [filter, setFilter] = useState<NodeFilter>(EMPTY_FILTER);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const [canvasZoom, setCanvasZoom] = useState(1);
   const [auditGraphOpen, setAuditGraphOpen] = usePref('audit-graph', false);
   const [auditSplit, setAuditSplit] = usePref('audit-split', 54);
   const clampSplit = (value: number) => Math.max(28, Math.min(76, Math.round(value)));
@@ -86,8 +90,8 @@ function Workspace() {
   const { agentIds, digest, currentId, current, findings, openItems } = agent;
   // Stepping through checkpoints is not the Agent writing: only the live board pulses.
   const { fresh, notice, flash, linkCopied, copyNodeLink, copied, copyDigest, offlineShown } = useWorkspaceFeedback(timeline.active ? null : snapshot, allNodes, digest, agentId, connection, isStatic);
-  const { nodes, edges, onNodesChange, layoutRevision, layoutMode, laying } = useWorkspaceLayout(projection, canvasMode, direction);
-  const { centerOnNode, fitCanvas, motion } = useWorkspaceViewport({ viewportRef, pendingFocus, layoutRevision, mode: canvasMode, follow: follow && !auditMode, currentId, selectedId });
+  const { nodes, edges, onNodesChange, layoutRevision, layoutMode, laying, layoutTransition } = useWorkspaceLayout(projection, canvasMode, direction);
+  const { centerOnNode, fitCanvas, focusNeighborhood, motion } = useWorkspaceViewport({ viewportRef, pendingFocus, layoutRevision, mode: canvasMode, follow: follow && !auditMode, currentId, selectedId });
   const { scene3d, sceneRef, openScene, closeScene, occlusion, exporting, exportImage } = useWorkspaceScene({ viewportRef, flatRef, inspectorRef, selectedId, mode: canvasMode, flash, enabled: !auditMode });
   // Resolve selection against the requested checkpoint, never its loading fallback.
   const { selected, focusNode, clearSelection, switchMode, handleNodesChange, onNodeClick } = useWorkspaceSelection({
@@ -132,12 +136,28 @@ function Workspace() {
     [hidden, projection],
   );
 
+  const neighborhoodTarget = selectedId ?? (!auditMode ? currentId : null);
+  const triggerNeighborhood = neighborhoodTarget ? () => {
+    focusNode(neighborhoodTarget, false);
+    if (projection?.nodes.some((node) => node.id === neighborhoodTarget)) {
+      requestAnimationFrame(() => focusNeighborhood(neighborhoodTarget, edges));
+    }
+  } : undefined;
+
   useWorkspaceShortcuts(clearSelection, setPaletteOpen, setShortcutsOpen, setSidebarOpen, {
     enabled: Boolean(snapshot) && !scene3d && (!auditMode || showAuditGraph),
     onFit: fitCanvas,
     onLocate: !auditMode && currentId ? () => focusNode(currentId) : undefined,
+    onNeighborhood: (!auditMode || showAuditGraph) ? triggerNeighborhood : undefined,
     onToggleMap: () => setShowMap((open) => !open),
   });
+
+  const toggleTheme = (origin?: { x: number; y: number }) => {
+    runViewTransition(() => setTheme(theme === 'light' ? 'dark' : 'light'), origin);
+  };
+  const changeCardTheme = (next: CardTheme) => {
+    if (next !== cardTheme) runViewTransition(() => setCardTheme(next));
+  };
   const openAuditArgument = (node: BoardNode) => {
     navigateWorkspace(isAuditIssue(node) ? { issueId: node.id, candidateId: null, node: node.id } : { candidateId: node.id, node: node.id });
     focusNode(node.id);
@@ -195,7 +215,7 @@ function Workspace() {
         agentIds={agentIds}
         onAgent={setAgentId}
         theme={theme}
-        onTheme={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+        onTheme={toggleTheme}
         connection={connection}
         isStatic={isStatic}
         sidebarOpen={sidebarOpen}
@@ -217,7 +237,7 @@ function Workspace() {
         {sidebarOpen && (
           <>
             <button className="absolute inset-0 z-20 bg-black/20 lg:hidden" aria-label={t('app.closeNav')} onClick={() => setSidebarOpen(false)} />
-            <aside className="z-30 w-64 shrink-0 border-r bg-background max-lg:absolute max-lg:inset-y-0 max-lg:left-0 max-lg:shadow-float">
+            <aside className="anim-sidebar-in z-30 w-64 shrink-0 border-r bg-background max-lg:absolute max-lg:inset-y-0 max-lg:left-0 max-lg:shadow-float">
               {audit ? <AuditCatalog audit={audit} selectedId={selectedId} onSelect={focusNode} onIssue={chooseIssue} onCandidate={chooseCandidate} onCandidateIssue={(id) => navigateWorkspace({ issueId: id })} onOpenArgument={openAuditArgument} onExpand={expandAudit} onSearch={() => { setPaletteOpen(true); closeSidebar(); }} /> :
               <Sidebar
                 current={current}
@@ -300,7 +320,7 @@ function Workspace() {
             </div>
           )}
           {(!auditMode || showAuditGraph) && (
-          <div ref={flatRef} className={cn('relative min-h-0', auditMode ? 'flex-1' : 'absolute inset-0')} inert={scene3d} aria-hidden={scene3d}>
+          <div ref={flatRef} data-layout-transition={layoutTransition ? 'true' : undefined} className={cn('relative min-h-0', auditMode ? 'flex-1' : 'absolute inset-0')} inert={scene3d} aria-hidden={scene3d}>
           <ReactFlow
             nodes={displayNodes}
             edges={displayEdges}
@@ -315,6 +335,12 @@ function Workspace() {
                 if (context && !context.pages[detail].open) expandAudit(context.pages[detail].key, 'more', 0);
               }
             }}
+            onNodeDoubleClick={(_event, node) => {
+              if (!node.data.group) {
+                focusNode(node.id, false);
+                requestAnimationFrame(() => focusNeighborhood(node.id, edges));
+              }
+            }}
             onPaneClick={clearSelection}
             onNodeMouseEnter={(_event, node) => { if (!node.data.group) setHoveredNodeId(node.id); }}
             onNodeMouseLeave={(_event, node) => { setHoveredNodeId((prev) => (prev === node.id ? null : prev)); }}
@@ -326,11 +352,15 @@ function Workspace() {
             colorMode={theme}
             fitView
             fitViewOptions={{ padding: .14, minZoom: .08, maxZoom: 1 }}
-            onMove={(_, viewport) => viewportRef.current?.style.setProperty('--zoom', String(viewport.zoom))}
+            onMove={(_, viewport) => {
+              viewportRef.current?.style.setProperty('--zoom', String(viewport.zoom));
+              setCanvasZoom((prev) => Math.abs(prev - viewport.zoom) > 0.04 ? viewport.zoom : prev);
+            }}
             proOptions={{ hideAttribution: true }}
             onlyRenderVisibleElements
           >
-            <Background variant={BackgroundVariant.Dots} gap={22} size={1} />
+            <Background id="minor" variant={BackgroundVariant.Dots} gap={20} size={1.05} />
+            <Background id="major" variant={BackgroundVariant.Dots} gap={100} size={1.75} color="var(--line-strong)" />
             <CanvasToolbar
               hasCurrent={!auditMode && Boolean(currentId)}
               canFollow={!isStatic && !auditMode}
@@ -343,6 +373,8 @@ function Workspace() {
               onToggleFollow={() => setFollow((value) => !value)}
               motion={motion}
               onLocate={() => currentId && focusNode(currentId)}
+              canFocusNeighborhood={Boolean(triggerNeighborhood)}
+              onFocusNeighborhood={triggerNeighborhood}
               onDirection={() => setDirection(direction === 'RIGHT' ? 'DOWN' : 'RIGHT')}
               onToggleMap={() => setShowMap((open) => !open)}
               showLegend={showLegend}
@@ -350,7 +382,7 @@ function Workspace() {
               edgeStyle={edgeStyle}
               onEdgeStyle={setEdgeStyle}
               cardTheme={cardTheme}
-              onCardTheme={setCardTheme}
+              onCardTheme={changeCardTheme}
               onScene3d={auditMode ? undefined : openScene}
             />
             {showMap && (
@@ -426,7 +458,7 @@ function Workspace() {
               </div>
             )}
             {timeline.active && (
-              <div role="status" className="pointer-events-auto flex items-center gap-2 whitespace-nowrap rounded-full border border-foreground bg-card px-3 py-1 text-xs text-foreground shadow-float">
+              <div role="status" className="anim-pill-in pointer-events-auto flex items-center gap-2 whitespace-nowrap rounded-full border border-foreground bg-card/90 px-3 py-1 text-xs text-foreground shadow-float backdrop-blur-md">
                 <History className="size-3.5" />
                 {t('timeline.banner', { id: timeline.point?.id ?? asOf ?? '', time: formatTime(timeline.point?.at ?? undefined) })}
                 <button type="button" className="rounded px-1 font-medium underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => { timeline.pause(); setAsOf(null); }}>
@@ -435,26 +467,33 @@ function Workspace() {
               </div>
             )}
             {isStatic && pastPoint && (
-              <div role="status" className="flex items-center gap-2 whitespace-nowrap rounded-full border border-foreground bg-card px-3 py-1 text-xs text-foreground shadow-xs">
+              <div role="status" className="flex items-center gap-2 whitespace-nowrap rounded-full border border-foreground bg-card/90 px-3 py-1 text-xs text-foreground shadow-xs backdrop-blur-md">
                 <History className="size-3.5" />
                 {t('timeline.staticBadge', { id: pastPoint.id, time: formatTime(pastPoint.at ?? undefined) })}
               </div>
             )}
             {hidden > 0 && (
               <button
-                className="pointer-events-auto whitespace-nowrap rounded-full border bg-card px-3 py-1 text-xs text-muted-foreground shadow-xs transition-colors hover:border-strong hover:text-foreground"
+                className="anim-pill-in pointer-events-auto whitespace-nowrap rounded-full border bg-card/90 px-3 py-1 text-xs text-muted-foreground shadow-xs backdrop-blur-md transition-colors hover:border-strong hover:text-foreground"
                 onClick={() => switchMode('all')}
               >
                 {t('app.hiddenNodes', { n: hidden })}
               </button>
             )}
-            {laying > 0 && <div role="status" className="whitespace-nowrap rounded-full border bg-card px-3 py-1 text-xs text-muted-foreground shadow-xs">{t('app.laying', { n: laying })}</div>}
-            {notice && <div role="status" className="whitespace-nowrap rounded-full border bg-card px-3 py-1 text-xs shadow-float">{notice}</div>}
+            {laying > 0 && <div role="status" className="anim-pill-in whitespace-nowrap rounded-full border bg-card/90 px-3 py-1 text-xs text-muted-foreground shadow-xs backdrop-blur-md">{t('app.laying', { n: laying })}</div>}
+            {notice && <div role="status" className="anim-pill-in whitespace-nowrap rounded-full border bg-card/90 px-3 py-1 text-xs shadow-float backdrop-blur-md">{notice}</div>}
           </div>
 
           <p className="sr-only" role="status" aria-live="polite">{selected ? t('app.selected', { type: typeLabelOf(selected.type), title: selected.title }) : ''}</p>
 
-          {selected && <Inspector panelRef={inspectorRef} node={selected} edges={allEdges} byId={byId} onClose={clearSelection} onFocus={focusNode} onCopyLink={copyNodeLink} linkCopied={linkCopied} reference={referenceEnabled ? { status: reference.status, message: reference.message, nodeId: reference.nodeId, onRequest: reference.request } : undefined} writable={writable} onReload={reload} isStatic={isStatic} connected={connection === 'live'} revision={syncedAt} />}
+          <CanvasPeekCard
+            node={activeHoverId && activeHoverId !== selectedId ? byId.get(activeHoverId) ?? null : null}
+            degree={activeHoverId ? (nodes.find((node) => node.id === activeHoverId)?.data.degree ?? 0) : 0}
+            visible={!scene3d && (!auditMode || showAuditGraph) && canvasZoom < 0.85 && Boolean(activeHoverId && activeHoverId !== selectedId)}
+            inspectorOpen={Boolean(selected)}
+          />
+
+          {selected && <Inspector panelRef={inspectorRef} node={selected} edges={allEdges} byId={byId} onClose={clearSelection} onFocus={focusNode} onFocusNeighborhood={(!auditMode || showAuditGraph) ? () => focusNeighborhood(selected.id, edges) : undefined} onCopyLink={copyNodeLink} linkCopied={linkCopied} reference={referenceEnabled ? { status: reference.status, message: reference.message, nodeId: reference.nodeId, onRequest: reference.request } : undefined} writable={writable} onReload={reload} isStatic={isStatic} connected={connection === 'live'} revision={syncedAt} />}
           </div>
         </main>
       </div>
@@ -487,8 +526,8 @@ function Workspace() {
         copied={copied}
         onSelect={focusNode}
         onMode={auditMode ? undefined : switchMode}
-        onTheme={() => setTheme(theme === 'light' ? 'dark' : 'light')}
-        onCardTheme={setCardTheme}
+        onTheme={toggleTheme}
+        onCardTheme={changeCardTheme}
         onCopyDigest={copyDigest}
         onExport={projection?.nodes.length && nodes.length > 0 && !exporting ? exportImage : null}
         onShortcuts={() => setShortcutsOpen(true)}

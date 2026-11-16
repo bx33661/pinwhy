@@ -78,7 +78,7 @@ export const RoutedEdge = memo(function RoutedEdge(props: EdgeProps) {
       }}
       markerStart={markerStart}
       markerEnd={markerEnd}
-      style={style}
+      style={{ ...style, ...(interacting ? { strokeWidth: 2.35 } : {}) }}
       interactionWidth={interactionWidth}
     />
     {showFlow && (

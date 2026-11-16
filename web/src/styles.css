@@ -46,6 +46,8 @@
 
   --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.04);
   --shadow-float: 0 0 0 1px var(--line), 0 8px 24px -4px rgb(0 0 0 / 0.08), 0 2px 6px -2px rgb(0 0 0 / 0.06);
+  --shadow-card: 0 1px 2px 0 rgb(15 23 42 / 0.05), 0 1px 1px -1px rgb(15 23 42 / 0.04);
+  --shadow-card-hover: 0 8px 20px -6px rgb(15 23 42 / 0.12), 0 2px 6px -2px rgb(15 23 42 / 0.06);
 }
 
 /* Pinwhy — neutral surfaces, one monochrome accent, colour only where it carries meaning. */
@@ -112,6 +114,8 @@
   --rel-produce: #fbbf24;
   --rel-replace: #94a3b8;
   --danger-soft: #2a1319;
+  --shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.35), 0 1px 0 0 rgb(255 255 255 / 0.03) inset;
+  --shadow-card-hover: 0 10px 26px -6px rgb(0 0 0 / 0.55), 0 2px 8px -2px rgb(0 0 0 / 0.4), 0 1px 0 0 rgb(255 255 255 / 0.06) inset;
 
   --node-start: #2dd4bf;
   --node-goal: #818cf8;
@@ -411,6 +415,23 @@
   .pinwhy-card {
     background: var(--surface);
     border-color: var(--line);
+    box-shadow: var(--shadow-card);
+    transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1), opacity 150ms, box-shadow 180ms, border-color 150ms, background-color 150ms;
+  }
+  .react-flow__node:not(.dragging):hover .pinwhy-card {
+    transform: translateY(-1.5px);
+    box-shadow: var(--shadow-card-hover);
+  }
+  .react-flow__node:not(.dragging):active .pinwhy-card {
+    transform: scale(0.992);
+  }
+  @keyframes card-enter {
+    from { opacity: 0; transform: translateY(8px) scale(0.97); }
+    to { opacity: 1; transform: none; }
+  }
+  .pinwhy-card[data-entering="true"] {
+    animation: card-enter 240ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+    animation-delay: calc(var(--enter-order, 0) * 18ms);
   }
   .pinwhy-card[data-severe="true"] {
     border-color: color-mix(in srgb, var(--danger) 34%, var(--line));
@@ -607,6 +628,12 @@
   animation: edge-flow 1.3s linear infinite;
 }
 .react-flow__edge-flow.is-reversed { animation-name: edge-flow-reverse; }
+[data-layout-transition="true"] .react-flow__node:not(.dragging) {
+  transition: transform 340ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+[data-layout-transition="true"] .react-flow__edges {
+  transition: opacity 220ms ease-out;
+}
 .react-flow__node { cursor: pointer; }
 .react-flow__node-boardGroup { cursor: default; }
 .react-flow__minimap {
@@ -621,9 +648,35 @@
 .react-flow__pane { cursor: default; }
 .react-flow__pane.dragging { cursor: grabbing; }
 
+/* View Transition API circular ink-reveal and style crossfade. */
+@keyframes theme-ripple {
+  from { clip-path: circle(0px at var(--vt-x, 50%) var(--vt-y, 50%)); }
+  to { clip-path: circle(var(--vt-r, 150vmax) at var(--vt-x, 50%) var(--vt-y, 50%)); }
+}
+html[data-vt="ripple"]::view-transition-old(root),
+html[data-vt="ripple"]::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+html[data-vt="ripple"]::view-transition-old(root) { z-index: 1; }
+html[data-vt="ripple"]::view-transition-new(root) {
+  z-index: 2;
+  animation: theme-ripple 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+html[data-vt="fade"]::view-transition-old(root),
+html[data-vt="fade"]::view-transition-new(root) {
+  animation-duration: 180ms;
+  animation-timing-function: ease-out;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  *, ::before, ::after { transition-duration: 0s !important; animation-duration: 0s !important; }
+  *, ::before, ::after { transition-duration: 0s !important; animation-duration: 0s !important; animation-delay: 0s !important; }
   .react-flow__edge-flow { display: none; }
+  .react-flow__node:hover .pinwhy-card,
+  .react-flow__node:active .pinwhy-card { transform: none !important; }
+  html::view-transition-group(*),
+  html::view-transition-old(*),
+  html::view-transition-new(*) { animation: none !important; }
 }
 
 @keyframes pulse-ring {
@@ -638,16 +691,25 @@
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes fade-out { from { opacity: 1; } to { opacity: 0; } }
 @keyframes slide-in-right { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
+@keyframes slide-in-left { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: none; } }
+@keyframes slide-up-bar { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes node-swap { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes pill-in { from { opacity: 0; transform: translateY(-6px) scale(.96); } to { opacity: 1; transform: none; } }
 .anim-surface[data-state="open"] { animation: surface-in .14s ease-out; }
 .anim-surface[data-state="closed"] { animation: surface-out .1s ease-in; }
 .anim-fade[data-state="open"] { animation: fade-in .14s ease-out; }
 .anim-fade[data-state="closed"] { animation: fade-out .1s ease-in; }
-.anim-slide-in { animation: slide-in-right .18s ease-out; }
+.anim-slide-in { animation: slide-in-right .18s cubic-bezier(0.22, 1, 0.36, 1); }
+.anim-sidebar-in { animation: slide-in-left .18s cubic-bezier(0.22, 1, 0.36, 1); }
+.anim-timeline-in { animation: slide-up-bar .18s cubic-bezier(0.22, 1, 0.36, 1); }
+.anim-node-swap { animation: node-swap .16s cubic-bezier(0.22, 1, 0.36, 1); }
+.anim-pill-in { animation: pill-in .18s cubic-bezier(0.22, 1, 0.36, 1); }
+.anim-peek-in { animation: pill-in .15s cubic-bezier(0.22, 1, 0.36, 1); }
 
 /* Nodes the Agent just wrote or changed. */
 @keyframes fresh-ring {
-  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ink) 40%, transparent); border-color: var(--ink); }
-  100% { box-shadow: 0 0 0 10px transparent; }
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--c, var(--live)) 42%, transparent); border-color: var(--c, var(--live)); }
+  100% { box-shadow: 0 0 0 11px transparent; }
 }
 .fresh-pulse { animation: fresh-ring 1.4s ease-out 3; }
 
@@ -668,7 +730,14 @@
 .severity-badge[data-severity="low"] { --severity: var(--severity-low); }
 
 /* The current node must be findable at a glance, at any zoom. */
-.current-halo { box-shadow: 0 0 0 5px color-mix(in srgb, var(--live) 16%, transparent); }
+@keyframes current-breathe {
+  0%, 100% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--live) 16%, transparent); }
+  50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--live) 8%, transparent); }
+}
+.current-halo {
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--live) 16%, transparent);
+  animation: current-breathe 3.4s ease-in-out infinite;
+}
 
 /* Badges that stay about the same size on screen while the board is zoomed out (--zoom is set on the canvas). */
 .zoom-chip {

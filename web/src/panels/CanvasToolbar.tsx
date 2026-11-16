@@ -1,4 +1,4 @@
-import { AlignHorizontalSpaceAround, AlignVerticalSpaceAround, Box, Check, Crosshair, CornerDownRight, Map as MapIcon, ImageDown, Maximize2, Minus, Plus, Palette, Radio, Slash, Spline, SwatchBook } from 'lucide-react';
+import { AlignHorizontalSpaceAround, AlignVerticalSpaceAround, Box, Check, Crosshair, CornerDownRight, Map as MapIcon, ImageDown, Maximize2, Minus, Plus, Palette, Radio, ScanSearch, Slash, Spline, SwatchBook } from 'lucide-react';
 import { Panel, useReactFlow, useStore, useViewport } from '@xyflow/react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -22,6 +22,8 @@ type Props = {
   onToggleFollow: () => void;
   motion: number;
   onLocate: () => void;
+  canFocusNeighborhood?: boolean;
+  onFocusNeighborhood?: () => void;
   onDirection: () => void;
   onToggleMap: () => void;
   showLegend: boolean;
@@ -34,7 +36,7 @@ type Props = {
 };
 
 /** One floating toolbar: framing, layout, and zoom live together. */
-export function CanvasToolbar({ hasCurrent, canFollow, canExport, onExport, grouped, direction, showMap, follow, motion, onLocate, onDirection, onToggleMap, onToggleFollow, edgeStyle, onEdgeStyle, cardTheme, onCardTheme, showLegend, onToggleLegend, onScene3d }: Props) {
+export function CanvasToolbar({ hasCurrent, canFollow, canExport, onExport, grouped, direction, showMap, follow, motion, onLocate, canFocusNeighborhood, onFocusNeighborhood, onDirection, onToggleMap, onToggleFollow, edgeStyle, onEdgeStyle, cardTheme, onCardTheme, showLegend, onToggleLegend, onScene3d }: Props) {
   const { zoom } = useViewport();
   const { zoomTo, zoomIn, zoomOut, fitView } = useReactFlow();
   const minZoom = useStore((state) => state.minZoom);
@@ -43,9 +45,10 @@ export function CanvasToolbar({ hasCurrent, canFollow, canExport, onExport, grou
   const Direction = direction === 'RIGHT' ? AlignHorizontalSpaceAround : AlignVerticalSpaceAround;
   return (
     <Panel position="bottom-left" className="m-3!">
-      <div className="flex max-w-[calc(100vw-1.5rem)] flex-wrap items-center gap-0.5 rounded-xl border bg-card p-1 shadow-float">
+      <div className="flex max-w-[calc(100vw-1.5rem)] flex-wrap items-center gap-0.5 rounded-xl border bg-card/88 p-1 shadow-float backdrop-blur-md">
         <IconButton label={t('toolbar.fit')} shortcut="F" onClick={() => fitView({ padding: 0.14, duration: motion })}><Maximize2 /></IconButton>
         {hasCurrent && <IconButton label={t('toolbar.locate')} shortcut="C" onClick={onLocate}><Crosshair /></IconButton>}
+        {canFocusNeighborhood && onFocusNeighborhood && <IconButton label={t('toolbar.focusNeighborhood')} shortcut="Z" onClick={onFocusNeighborhood}><ScanSearch /></IconButton>}
         {hasCurrent && canFollow && (
           <IconButton
             label={grouped ? t('toolbar.followDisabled') : follow ? t('toolbar.unfollow') : t('toolbar.follow')}

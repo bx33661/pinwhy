@@ -13,11 +13,17 @@ export function useWorkspaceLayout(projection: WorkspaceProjection | null, mode:
   const [layoutRevision, setLayoutRevision] = useState(0);
   const [layoutMode, setLayoutMode] = useState<ViewMode | null>(null);
   const [laying, setLaying] = useState(0);
+  const [layoutTransition, setLayoutTransition] = useState(false);
   const [overviewColumns, setOverviewColumns] = useState<1 | 2>(() => window.innerWidth > 1100 ? 2 : 1);
   const layoutKey = useRef('');
   const lastPositions = useRef(new Map<string, Positions>());
   const laidOutDirection = useRef<string | null>(null);
+  const hasMounted = useRef(false);
+  const knownIds = useRef(new Set<string>());
+  const transitionTimer = useRef<number | undefined>(undefined);
   const updateNodeInternals = useUpdateNodeInternals();
+
+  useEffect(() => () => clearTimeout(transitionTimer.current), []);
 
   useEffect(() => {
     const resize = () => setOverviewColumns(window.innerWidth > 1100 ? 2 : 1);
@@ -56,9 +62,28 @@ export function useWorkspaceLayout(projection: WorkspaceProjection | null, mode:
     const layout = projection.audit ? Promise.resolve(layoutAudit(projection.nodes, projection.edges)) : layoutGraph(projection.nodes, projection.edges, direction, mode === 'all', overviewColumns, lastPositions.current.get(viewKey));
     layout.then((layouted) => {
       if (cancelled) return;
+      const allowMotion = hasMounted.current && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      let enterCount = 0;
+      const nextNodes = allowMotion
+        ? layouted.nodes.map((node) => (!node.data.group && !knownIds.current.has(node.id)
+          ? { ...node, data: { ...node.data, entering: true, enterOrder: Math.min(enterCount++, 8) } }
+          : node))
+        : layouted.nodes;
+      knownIds.current = new Set(layouted.nodes.map((node) => node.id));
+      hasMounted.current = true;
       lastPositions.current.set(viewKey, new Map(layouted.nodes.map((node) => [node.id, node.position])));
       layoutKey.current = key;
-      setNodes(layouted.nodes);
+      if (allowMotion) {
+        setLayoutTransition(true);
+        clearTimeout(transitionTimer.current);
+        transitionTimer.current = window.setTimeout(() => {
+          setLayoutTransition(false);
+          setNodes((prev) => prev.some((node) => node.data.entering)
+            ? prev.map((node) => node.data.entering ? { ...node, data: { ...node.data, entering: false } } : node)
+            : prev);
+        }, 360);
+      }
+      setNodes(nextNodes);
       setEdges(layouted.edges);
       setLayoutMode(mode);
       setLayoutRevision((revision) => revision + 1);
@@ -69,5 +94,5 @@ export function useWorkspaceLayout(projection: WorkspaceProjection | null, mode:
     return () => { cancelled = true; clearTimeout(slow); };
   }, [projection, mode, direction, overviewColumns, setNodes, setEdges, updateNodeInternals]);
 
-  return { nodes, edges, onNodesChange, layoutRevision, layoutMode, laying };
+  return { nodes, edges, onNodesChange, layoutRevision, layoutMode, laying, layoutTransition };
 }

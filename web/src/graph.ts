@@ -37,6 +37,8 @@ export type CanvasNodeData = Record<string, unknown> & {
   muted?: boolean;
   hoverMuted?: boolean;
   hoverPeer?: boolean;
+  entering?: boolean;
+  enterOrder?: number;
   fresh?: boolean;
   auditRoles?: AuditNodeRole[];
   auditCounts?: { contradiction: number; condition: number };

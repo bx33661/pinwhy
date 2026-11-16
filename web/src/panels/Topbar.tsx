@@ -25,7 +25,7 @@ type Props = {
   agentIds: string[];
   onAgent: (agentId: string) => void;
   theme: 'light' | 'dark';
-  onTheme: () => void;
+  onTheme: (origin?: { x: number; y: number }) => void;
   connection: Connection;
   isStatic: boolean;
   sidebarOpen: boolean;
@@ -208,7 +208,7 @@ export function Topbar(props: Props) {
         {onTimeline && <IconButton label={timelineOpen ? t('timeline.close') : t('timeline.open')} aria-pressed={timelineOpen} onClick={onTimeline}><History /></IconButton>}
         {onNew && <Button size="sm" variant="default" className="shadow-xs" onClick={onNew} aria-label={t('topbar.newNode')}><Plus className="size-3.5" /><span className="max-sm:hidden">{t('topbar.new')}</span></Button>}
         <Button ref={digestRef} size="sm" variant="ghost" className="text-subtle hover:text-foreground" onClick={onDigest} aria-label={t('topbar.digestLabel')}><FileText className="size-3.5" /><span className="max-sm:hidden">{t('topbar.digest')}</span></Button>
-        <IconButton label={theme === 'light' ? t('theme.toDark') : t('theme.toLight')} onClick={onTheme}>{theme === 'light' ? <Moon /> : <Sun />}</IconButton>
+        <IconButton label={theme === 'light' ? t('theme.toDark') : t('theme.toLight')} onClick={(event) => onTheme({ x: event.clientX, y: event.clientY })}>{theme === 'light' ? <Moon /> : <Sun />}</IconButton>
       </div>
     </header>
   );

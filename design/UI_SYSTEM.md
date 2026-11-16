@@ -24,19 +24,24 @@ Quiet tool chrome for exploration. General and security-audit modes are two read
   current position, active goals, open items, findings, unconnected records — plus counts.
   Rows show recorded status, severity and confidence independently, mark items absent from a
   filtered canvas view subtly, and footer counts wrap between labels without splitting a label.
-- **Canvas**: full-bleed React Flow. Overview trays use tinted solid frames with unclipped
-  floating capsule headers; retired statuses (`dead`, `refuted`, `superseded`) render with
-  dashed borders and muted strike-through headings. Hovering or selecting a node softly dims
-  non-adjacent cards, illuminates 1-hop edges with directional flow cues and origin dots plus
-  pill relation labels without changing selection or URL state, and detail zoom surfaces
-  recorded source locations at card footers. One grouped floating toolbar (bottom-left) holds
-  framing (`F`/`C`), layout & expression (`M` minimap with semantic node colors, selectable
-  node card style across `clean`, `aura`, `mono`, `morandi`, and `classic`), export, `2.5D`,
-  and zoom controls. At narrow widths the zoom controls wrap together onto another row,
-  keeping every button visible.
-- **Inspector**: floats over the canvas right edge with a draggable desktop width handle
-  (`340–560px`, persisted locally; bottom sheet on phones), so selecting a node never resizes
-  or re-lays-out the canvas. Metadata sits in a compact orthogonal grid, node IDs and source
+- **Canvas**: full-bleed React Flow over a dual-scale dot grid (`20px` minor + `100px` major).
+  Overview trays use tinted solid frames with unclipped floating capsule headers; retired
+  statuses (`dead`, `refuted`, `superseded`) render with dashed borders and muted
+  strike-through headings. View switches and graph updates glide nodes smoothly (`340ms`) with
+  staggered card entrance while leaving drags instant. Hovering or selecting a node lifts the
+  card subtly, dims non-adjacent cards, illuminates 1-hop edges with directional flow cues and
+  origin dots plus pill relation labels without changing selection or URL state; hovering a
+  far-zoom node (`< 0.85`) surfaces a temporary bottom-right peek HUD card after a short dwell.
+  Double-clicking a node (or pressing `Z`) frames its 1-hop neighborhood cleanly beside the
+  Inspector, and detail zoom surfaces recorded source locations at card footers. One frosted
+  grouped floating toolbar (bottom-left) holds framing (`F`/`C`/`Z`), layout & expression (`M`
+  minimap with semantic node colors, selectable node card style across `clean`, `aura`, `mono`,
+  `morandi`, and `classic`), export, `2.5D`, and zoom controls. Light/dark and card-style
+  switches animate via the browser View Transition API when motion is enabled. At narrow widths
+  the zoom controls wrap together onto another row, keeping every button visible.
+- **Inspector**: floats over the canvas right edge with frosted backdrop blur and a draggable
+  desktop width handle (`340–560px`, persisted locally; bottom sheet on phones), so selecting a
+  node never resizes or re-lays-out the canvas and cross-fades cleanly between selections. Metadata sits in a compact orthogonal grid, node IDs and source
   locations offer one-click copy feedback, inline backtick code spans in detail text render as
   subtle monospace chips, relations group by direction with tinted family pills, and writable
   add/connect forms use progressive disclosure with a visual node-type picker popover.
