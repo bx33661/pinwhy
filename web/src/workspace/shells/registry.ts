@@ -5,8 +5,8 @@ import type { WorkspaceMode } from '../../types';
  * each shell only decides how authored records are arranged for reading.
  * Add a future scene by registering another id here — do not specialize lib/.
  */
-export const WORKSPACE_SHELLS = ['general', 'audit'] as const satisfies readonly WorkspaceMode[];
+export const WORKSPACE_SHELLS = ['general', 'audit', 'ultra'] as const satisfies readonly WorkspaceMode[];
 
 export function isWorkspaceShell(value: string | null | undefined): value is WorkspaceMode {
-  return value === 'general' || value === 'audit';
+  return value === 'general' || value === 'audit' || value === 'ultra';
 }

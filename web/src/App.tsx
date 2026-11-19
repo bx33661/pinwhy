@@ -11,6 +11,7 @@ import { RoutedEdge } from './RoutedEdge';
 import { formatTime, project, typeLabel as typeLabelOf, type CanvasNode } from './graph';
 import { EMPTY_FILTER, type NodeFilter } from './presentation';
 import { useGraphStream } from './use-graph-stream';
+import { useUltraStream } from './use-ultra-stream';
 import { CanvasPeekCard } from './panels/CanvasPeekCard';
 import { CanvasToolbar } from './panels/CanvasToolbar';
 import { CommandPalette } from './panels/CommandPalette';
@@ -37,8 +38,9 @@ import { useWorkspaceTimeline } from './workspace/use-workspace-timeline';
 import { useWorkspaceChrome, useWorkspaceShortcuts } from './workspace/use-workspace-chrome';
 import { useEmbedHost } from './workspace/use-embed-host';
 import { AuditCatalog, AuditDossier } from './workspace/shells/audit';
+import { UltraWorkspace } from './workspace/shells/ultra';
 import { isAuditIssue } from './workspace/audit';
-import type { BoardNode } from './types';
+import type { BoardNode, WorkspaceMode } from './types';
 import type { Scene3DProps } from './scene3d/shared';
 import { readPresentation } from './embedded';
 import { usePref } from './use-pref';
@@ -83,21 +85,27 @@ function Workspace() {
   const inspectorRef = useRef<HTMLElement>(null);
 
   const auditMode = workspace === 'audit';
+  const ultraMode = workspace === 'ultra';
   const showAuditGraph = auditMode && auditGraphOpen;
   const canvasMode = auditMode ? 'logic' : mode;
+  const ultraSnapshot = useUltraStream(ultraMode, asOf, isStatic, snapshot);
+  const [ultraInspectorOpen, setUltraInspectorOpen] = useState(false);
+  useEffect(() => {
+    if (!ultraMode || !selectedId) setUltraInspectorOpen(false);
+  }, [ultraMode, selectedId]);
   const { board, agent, audit, expandAudit, projection, results, legend } = useWorkspaceData(snapshot, mode, agentId, filter, auditMode ? { issueId, candidateId, selectedId: selectedId ?? deepLink.current } : undefined);
   const { allNodes, allEdges, activities, byId, inbox, paletteNodes, filterOptions, counts } = board;
   const { agentIds, digest, currentId, current, findings, openItems } = agent;
   // Stepping through checkpoints is not the Agent writing: only the live board pulses.
   const { fresh, notice, flash, linkCopied, copyNodeLink, copied, copyDigest, offlineShown } = useWorkspaceFeedback(timeline.active ? null : snapshot, allNodes, digest, agentId, connection, isStatic);
   const { nodes, edges, onNodesChange, layoutRevision, layoutMode, laying, layoutTransition } = useWorkspaceLayout(projection, canvasMode, direction);
-  const { centerOnNode, fitCanvas, focusNeighborhood, motion } = useWorkspaceViewport({ viewportRef, pendingFocus, layoutRevision, mode: canvasMode, follow: follow && !auditMode, currentId, selectedId });
-  const { scene3d, sceneRef, openScene, closeScene, occlusion, exporting, exportImage } = useWorkspaceScene({ viewportRef, flatRef, inspectorRef, selectedId, mode: canvasMode, flash, enabled: !auditMode });
+  const { centerOnNode, fitCanvas, focusNeighborhood, motion } = useWorkspaceViewport({ viewportRef, pendingFocus, layoutRevision, mode: canvasMode, follow: follow && !auditMode && !ultraMode, currentId, selectedId });
+  const { scene3d, sceneRef, openScene, closeScene, occlusion, exporting, exportImage } = useWorkspaceScene({ viewportRef, flatRef, inspectorRef, selectedId, mode: canvasMode, flash, enabled: !auditMode && !ultraMode });
   // Resolve selection against the requested checkpoint, never its loading fallback.
   const { selected, focusNode, clearSelection, switchMode, handleNodesChange, onNodeClick } = useWorkspaceSelection({
     snapshot: timeline.active && !timeline.point ? null : snapshot,
     byId, projection, nodes, edges, mode, setMode, selectedId, setSelectedId,
-    deepLink, pendingFocus, centerOnNode, onNodesChange, closeSidebar, scene3d, revealInGeneral: !auditMode,
+    deepLink, pendingFocus, centerOnNode, onNodesChange, closeSidebar, scene3d, revealInGeneral: !auditMode && !ultraMode,
   });
   // A bare host can navigate and restyle; only `reference=1` offers the explicit reference action,
   // and never over a checkpoint or a static export, where the canonical node may differ.
@@ -136,7 +144,7 @@ function Workspace() {
     [hidden, projection],
   );
 
-  const neighborhoodTarget = selectedId ?? (!auditMode ? currentId : null);
+  const neighborhoodTarget = selectedId ?? (!auditMode && !ultraMode ? currentId : null);
   const triggerNeighborhood = neighborhoodTarget ? () => {
     focusNode(neighborhoodTarget, false);
     if (projection?.nodes.some((node) => node.id === neighborhoodTarget)) {
@@ -145,10 +153,10 @@ function Workspace() {
   } : undefined;
 
   useWorkspaceShortcuts(clearSelection, setPaletteOpen, setShortcutsOpen, setSidebarOpen, {
-    enabled: Boolean(snapshot) && !scene3d && (!auditMode || showAuditGraph),
+    enabled: Boolean(snapshot) && !scene3d && !ultraMode && (!auditMode || showAuditGraph),
     onFit: fitCanvas,
-    onLocate: !auditMode && currentId ? () => focusNode(currentId) : undefined,
-    onNeighborhood: (!auditMode || showAuditGraph) ? triggerNeighborhood : undefined,
+    onLocate: !auditMode && !ultraMode && currentId ? () => focusNode(currentId) : undefined,
+    onNeighborhood: (!ultraMode && (!auditMode || showAuditGraph)) ? triggerNeighborhood : undefined,
     onToggleMap: () => setShowMap((open) => !open),
   });
 
@@ -197,18 +205,21 @@ function Workspace() {
   const pastPoint = snapshot.meta.asOf;
   const stats = snapshot.stats || {};
 
+  const switchWorkspace = (next: WorkspaceMode) => {
+    navigateWorkspace({ workspace: next });
+    if (selectedId) pendingFocus.current = selectedId;
+    if (next === 'general' && snapshot && selectedId && !project(snapshot, mode, '', agentId).nodes.some((node) => node.id === selectedId)) setMode('all');
+  };
+
   return (
     <div className="flex h-full flex-col">
+      {!ultraMode && (
       <Topbar
         compact={presentation.embedded}
         title={snapshot.meta.title || t('app.untitledTask')}
         build={snapshot.meta.build}
         workspace={workspace}
-        onWorkspace={(next) => {
-          navigateWorkspace({ workspace: next });
-          if (selectedId) pendingFocus.current = selectedId;
-          if (next === 'general' && snapshot && selectedId && !project(snapshot, mode, '', agentId).nodes.some((node) => node.id === selectedId)) setMode('all');
-        }}
+        onWorkspace={switchWorkspace}
         mode={mode}
         onMode={switchMode}
         agentId={agentId}
@@ -232,7 +243,56 @@ function Workspace() {
           setTimelineOpen(!timelineOpen);
         }}
       />
+      )}
 
+      {ultraMode ? (
+        <main className="relative flex min-h-0 flex-1 flex-col" aria-label={t('ultra.aria')}>
+          <UltraWorkspace
+            snapshot={snapshot}
+            ultra={ultraSnapshot}
+            connection={connection}
+            isStatic={isStatic}
+            writable={writable}
+            selectedId={selectedId}
+            timelineOpen={timelineOpen}
+            onSelectNode={(id) => {
+              if (!id) clearSelection();
+              else setSelectedId(id);
+            }}
+            onInspectFullNode={(id) => {
+              setSelectedId(id);
+              setUltraInspectorOpen(true);
+            }}
+            onWorkspace={switchWorkspace}
+            onSearch={() => setPaletteOpen(true)}
+            onDigest={() => setDigestOpen(true)}
+            onNew={writable ? () => setNewOpen(true) : undefined}
+            onTimeline={isStatic ? undefined : () => {
+              if (timelineOpen) { timeline.pause(); setAsOf(null); }
+              setTimelineOpen(!timelineOpen);
+            }}
+            onReload={reload}
+          />
+          {ultraInspectorOpen && selected && (
+            <Inspector
+              panelRef={inspectorRef}
+              node={selected}
+              edges={allEdges}
+              byId={byId}
+              onClose={() => setUltraInspectorOpen(false)}
+              onFocus={(id) => setSelectedId(id)}
+              onCopyLink={copyNodeLink}
+              linkCopied={linkCopied}
+              reference={referenceEnabled ? { status: reference.status, message: reference.message, nodeId: reference.nodeId, onRequest: reference.request } : undefined}
+              writable={writable}
+              onReload={reload}
+              isStatic={isStatic}
+              connected={connection === 'live'}
+              revision={syncedAt}
+            />
+          )}
+        </main>
+      ) : (
       <div className="relative flex min-h-0 flex-1">
         {sidebarOpen && (
           <>
@@ -497,6 +557,7 @@ function Workspace() {
           </div>
         </main>
       </div>
+      )}
 
       {timelineOpen && !isStatic && (
         <TimelineBar
@@ -524,18 +585,18 @@ function Workspace() {
         theme={theme}
         cardTheme={cardTheme}
         copied={copied}
-        onSelect={focusNode}
-        onMode={auditMode ? undefined : switchMode}
+        onSelect={(id) => ultraMode ? setSelectedId(id) : focusNode(id)}
+        onMode={auditMode || ultraMode ? undefined : switchMode}
         onTheme={toggleTheme}
         onCardTheme={changeCardTheme}
         onCopyDigest={copyDigest}
-        onExport={projection?.nodes.length && nodes.length > 0 && !exporting ? exportImage : null}
+        onExport={!ultraMode && projection?.nodes.length && nodes.length > 0 && !exporting ? exportImage : null}
         onShortcuts={() => setShortcutsOpen(true)}
       />
       <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
       <WriteRecovery writable={writable} />
       {writable && <NewNodeDialog open={newOpen} onOpenChange={setNewOpen} />}
-      <DigestDialog open={digestOpen} onOpenChange={setDigestOpen} digest={digest} copied={copied} onCopy={copyDigest} returnFocus={digestTrigger} byId={byId} onFocus={focusNode} agentId={agentId} checkpoints={snapshot?.checkpoints} isStatic={isStatic} connected={connection === 'live'} revision={syncedAt} />
+      <DigestDialog open={digestOpen} onOpenChange={setDigestOpen} digest={digest} copied={copied} onCopy={copyDigest} returnFocus={digestTrigger} byId={byId} onFocus={(id) => ultraMode ? setSelectedId(id) : focusNode(id)} agentId={agentId} checkpoints={snapshot?.checkpoints} isStatic={isStatic} connected={connection === 'live'} revision={syncedAt} />
     </div>
   );
 }

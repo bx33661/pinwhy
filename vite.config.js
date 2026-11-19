@@ -25,6 +25,7 @@ export default defineConfig({
     proxy: {
       '/api': backendUrl,
       '/events': backendUrl,
+      '/ultra-events': backendUrl,
     },
   },
   preview: {

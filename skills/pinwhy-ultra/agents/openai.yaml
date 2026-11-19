@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pinwhy Ultra 探查"
+  short_description: "用确定性源码切片台账、前提依赖追踪与阅读承诺对账，支撑全量走读、线索深挖与专家现场介入。"
+  default_prompt: "使用 $pinwhy-ultra 对指定项目执行 Ultra 探查：先 sync 锁定切片范围，遇线索当场深挖并用 --depends-on 记录校验前提，其余按 next 推进，持续补齐 check 中的阅读与凭据承诺（commitmentComplete），同时优先回应人类现场追问并如实保留未知边界。"

@@ -13,7 +13,8 @@
   "keywords": ["pinwhy", "agent-memory", "cli", "context", "local-first"],
   "type": "module",
   "bin": {
-    "pinwhy": "./bin/pinwhy.js"
+    "pinwhy": "./bin/pinwhy.js",
+    "pinwhy-ultra": "./bin/pinwhy-ultra.js"
   },
   "files": [
     "bin/",
@@ -33,6 +34,9 @@
     "site:dev": "npm --prefix site run dev",
     "site:build": "npm --prefix site run build",
     "serve": "node bin/pinwhy.js serve",
+    "ultra": "node bin/pinwhy-ultra.js",
+    "demo:ultra": "node scripts/seed-ultra-demo.mjs",
+    "demo:ultra:serve": "node bin/pinwhy.js serve --cwd test/fixtures/ultra-demo-board --open",
     "demo:audit": "node scripts/seed-audit-demo.mjs",
     "demo:audit:serve": "node bin/pinwhy.js serve --cwd test/fixtures/audit-demo-board --open",
     "export": "node bin/pinwhy.js export",

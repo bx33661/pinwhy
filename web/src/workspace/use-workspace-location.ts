@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ViewMode, WorkspaceMode } from '../types';
+import { isWorkspaceShell } from './shells/registry';
 
 type ReaderLocation = { workspace: WorkspaceMode; issueId: string | null; candidateId: string | null; node: string | null };
 
@@ -10,7 +11,8 @@ export function useWorkspaceLocation() {
     const view = params.get('view');
     const mode: ViewMode = view === 'logic' || view === 'all' ? view : 'context';
     const asOf = window.__PINWHY_DATA__ === undefined ? params.get('asOf') || null : null;
-    const workspace: WorkspaceMode = params.get('workspace') === 'audit' ? 'audit' : 'general';
+    const rawWs = params.get('workspace');
+    const workspace: WorkspaceMode = isWorkspaceShell(rawWs) ? rawWs : 'general';
     return { agentId: params.get('agent') || 'agent:primary', mode, workspace, issue: params.get('issue'), candidate: params.get('candidate'), node: params.get('node'), asOf };
   });
   const [agentId, setAgentId] = useState(initial.agentId);
@@ -27,7 +29,7 @@ export function useWorkspaceLocation() {
     const url = new URL(location.href);
     if (patch.workspace !== undefined) {
       setWorkspace(patch.workspace);
-      if (patch.workspace === 'audit') url.searchParams.set('workspace', 'audit'); else url.searchParams.delete('workspace');
+      if (patch.workspace !== 'general') url.searchParams.set('workspace', patch.workspace); else url.searchParams.delete('workspace');
     }
     for (const [key, param, setter] of [
       ['issueId', 'issue', setIssueId], ['candidateId', 'candidate', setCandidateId], ['node', 'node', setSelectedId],
@@ -46,7 +48,8 @@ export function useWorkspaceLocation() {
       const view = params.get('view');
       setMode(view === 'logic' || view === 'all' ? view : 'context');
       setAgentId(params.get('agent') || 'agent:primary');
-      setWorkspace(params.get('workspace') === 'audit' ? 'audit' : 'general');
+      const rawWs = params.get('workspace');
+      setWorkspace(isWorkspaceShell(rawWs) ? rawWs : 'general');
       setIssueId(params.get('issue'));
       setCandidateId(params.get('candidate'));
       const node = params.get('node');
@@ -64,7 +67,7 @@ export function useWorkspaceLocation() {
     url.searchParams.delete('page');
     url.searchParams.set('view', mode);
     url.searchParams.set('agent', agentId);
-    if (workspace === 'audit') url.searchParams.set('workspace', workspace); else url.searchParams.delete('workspace');
+    if (workspace !== 'general') url.searchParams.set('workspace', workspace); else url.searchParams.delete('workspace');
     if (issueId) url.searchParams.set('issue', issueId); else url.searchParams.delete('issue');
     if (candidateId) url.searchParams.set('candidate', candidateId); else url.searchParams.delete('candidate');
     if (!deepLink.current || selectedId) {

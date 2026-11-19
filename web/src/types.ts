@@ -104,7 +104,107 @@ export type GraphSnapshot = {
 };
 
 export type ViewMode = 'context' | 'logic' | 'all';
-export type WorkspaceMode = 'general' | 'audit';
+export type WorkspaceMode = 'general' | 'audit' | 'ultra';
+
+export type UltraSliceStatus = 'pending' | 'stale' | 'shallow' | 'cleared' | 'flagged';
+
+export type UltraSlice = {
+  id: string;
+  key: string;
+  path: string;
+  sector: string;
+  startLine: number;
+  endLine: number;
+  lines: number;
+  hash: string;
+  status: string;
+  effectiveStatus: UltraSliceStatus;
+  shallowReason?: string | null;
+  unverifiedDependencies?: string[];
+  humanFollowups?: string[];
+  note?: string;
+  refs?: string[];
+  dependsOn?: string[];
+  reviewedHash?: string | null;
+  agent?: string | null;
+  reopenReason?: string;
+  syncAt?: number | null;
+  updatedAt?: number | null;
+};
+
+export type UltraSectorSummary = {
+  sector: string;
+  totalSlices: number;
+  totalLines: number;
+  pending: number;
+  stale: number;
+  shallow: number;
+  cleared: number;
+  flagged: number;
+  findings: number;
+  openThreads: number;
+  sliceIds: string[];
+};
+
+export type UltraGapNode = {
+  id: string;
+  type: string;
+  title: string;
+  status: string | null;
+  severity: string | null;
+  confidence: string | null;
+  loc?: { path?: string; line?: number; column?: number } | null;
+  author?: string | null;
+  updatedBy?: string | null;
+};
+
+export type UltraSnapshot = {
+  schema: 'pinwhy.ultra.v1';
+  readOnly: true;
+  prescriptive: false;
+  initialized: boolean;
+  scope: string | null;
+  maxSliceLines: number;
+  syncCount: number;
+  updatedAt: number | null;
+  integrity?: { corruptLines: number };
+  summary: {
+    totalSlices: number;
+    totalLines: number;
+    pending: number;
+    stale: number;
+    shallow: number;
+    cleared: number;
+    flagged: number;
+    coveredSlices: number;
+    sectors: number;
+    openThreads: number;
+    unbackedVerdicts: number;
+    awakenedChains: number;
+    unresolvedAnomalies: number;
+    humanSignals: number;
+    untrackedFiles: number;
+    diskStale: number;
+    remainingSlices: number;
+    coverageRatio: number;
+  };
+  slices: UltraSlice[];
+  sectors: UltraSectorSummary[];
+  gaps: {
+    openThreads: UltraGapNode[];
+    unbackedVerdicts: UltraGapNode[];
+    awakenedChains: { hypothesis: UltraGapNode; matches: { nodeId: string; title: string; via: string }[] }[];
+    unresolvedAnomalies: UltraGapNode[];
+    humanSignals: UltraGapNode[];
+    untrackedFiles: string[];
+    diskStaleIds: string[];
+    shallowSlices: { id: string; path: string; startLine: number; endLine: number; reason: string | null; unverifiedDependencies?: string[]; humanFollowups?: string[] }[];
+    staleSlices: { id: string; path: string; startLine: number; endLine: number }[];
+  };
+  breadthComplete: boolean;
+  commitmentComplete?: boolean;
+  allClear: boolean;
+};
 
 export const values = <T,>(input: Record<string, T> | T[] | undefined): T[] =>
   Array.isArray(input) ? input : Object.values(input || {});

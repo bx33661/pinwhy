@@ -95,6 +95,7 @@ export function Topbar(props: Props) {
               <Segmented<WorkspaceMode> className="w-full" value={workspace} onValueChange={(next) => { onWorkspace(next); setMenuOpen(false); }} aria-label={t('workspace.label')}>
                 <SegmentedItem className="flex-1 justify-center" value="general">{t('workspace.general')}</SegmentedItem>
                 <SegmentedItem className="flex-1 justify-center" value="audit">{t('workspace.audit')}</SegmentedItem>
+                <SegmentedItem className="flex-1 justify-center" value="ultra">{t('workspace.ultra')}</SegmentedItem>
               </Segmented>
               {agentIds.length > 1 && (
                 <>
@@ -162,6 +163,7 @@ export function Topbar(props: Props) {
         <Segmented<WorkspaceMode> value={workspace} onValueChange={onWorkspace} aria-label={t('workspace.label')}>
           <SegmentedItem value="general">{t('workspace.general')}</SegmentedItem>
           <SegmentedItem value="audit">{t('workspace.audit')}</SegmentedItem>
+          <SegmentedItem value="ultra">{t('workspace.ultra')}</SegmentedItem>
         </Segmented>
         {workspace === 'general' && <Segmented<ViewMode> value={mode} onValueChange={onMode} aria-label={t('topbar.views')}>
           <SegmentedItem value="context" aria-label={t('view.contextLabel')}><Focus /><span className="max-sm:hidden">{t('view.context')}</span></SegmentedItem>
