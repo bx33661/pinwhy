@@ -15,10 +15,12 @@ export const CAMERA_PRESETS = {
 
 /** Chip height by recorded severity. Unset stays a thin die; an unknown authored level is not ranked. */
 const CHIP_HEIGHT: Record<'low' | 'medium' | 'high' | 'critical', number> = { low: 0.3, medium: 0.5, high: 0.8, critical: 1.2 };
+const SEVERITY_LEVELS: Record<string, keyof typeof CHIP_HEIGHT> = { low: 'low', medium: 'medium', high: 'high', critical: 'critical' };
 const UNSET_HEIGHT = 0.14;
 const UNKNOWN_HEIGHT = 0.4;
 /** The level when it is one of the four ranked ones; anything else is shown as authored, without a rank. */
-export const ratedSeverity = (severity?: string | null) => severity && Object.hasOwn(CHIP_HEIGHT, severity) ? severity as keyof typeof CHIP_HEIGHT : null;
+export const ratedSeverity = (severity?: string | null) =>
+  severity && Object.hasOwn(SEVERITY_LEVELS, severity) ? SEVERITY_LEVELS[severity] : null;
 export function chipHeight(severity?: string | null) {
   const rated = ratedSeverity(severity);
   return rated ? CHIP_HEIGHT[rated] : severity ? UNKNOWN_HEIGHT : UNSET_HEIGHT;
@@ -85,12 +87,42 @@ export function sceneBounds(blocks: Block[]): SceneBounds {
   return { cx: (minX + maxX) / 2, cz: (minZ + maxZ) / 2, w, d, radius: Math.max(4, Math.hypot(w, d) / 2) };
 }
 
+export type SceneEdgeData = {
+  group?: RelationGroup;
+  quiet?: boolean;
+  reversed?: boolean;
+  route?: EdgeRoute;
+};
+
+const RELATION_GROUP_SET: ReadonlySet<string> = new Set<RelationGroup>(['support', 'oppose', 'derive', 'produce', 'replace', 'link']);
+
+function isRelationGroup(value: unknown): value is RelationGroup {
+  return typeof value === 'string' && RELATION_GROUP_SET.has(value);
+}
+
+function isEdgeRoute(value: unknown): value is EdgeRoute {
+  return typeof value === 'object' && value !== null
+    && 'points' in value && Array.isArray(value.points)
+    && 'source' in value && 'target' in value;
+}
+
+function sceneEdgeData(edge: Edge): SceneEdgeData {
+  const raw = edge.data;
+  if (!raw || typeof raw !== 'object') return {};
+  return {
+    group: isRelationGroup(raw.group) ? raw.group : undefined,
+    quiet: typeof raw.quiet === 'boolean' ? raw.quiet : undefined,
+    reversed: typeof raw.reversed === 'boolean' ? raw.reversed : undefined,
+    route: isEdgeRoute(raw.route) ? raw.route : undefined,
+  };
+}
+
 /** Everything the board's shape depends on: equal keys mean the last stream tick's traces still hold. */
 export const shapeKey = (blocks: Block[]) => blocks.map((block) => `${block.id}:${block.x}:${block.z}:${block.w}:${block.d}:${block.height}`).join('|');
 /** Everything about the relations that shapes a trace, beyond where the chips stand. */
 export const tracesKey = (edges: Edge[]) => edges.map((edge) => {
-  const data = edge.data as { group?: string; quiet?: boolean; reversed?: boolean } | undefined;
-  return `${edge.id}:${edge.source}:${edge.target}:${data?.group}:${data?.quiet}:${data?.reversed}`;
+  const data = sceneEdgeData(edge);
+  return `${edge.id}:${edge.source}:${edge.target}:${data.group}:${data.quiet}:${data.reversed}`;
 }).join('|');
 
 export type HomeFrame = { position: [number, number, number]; target: [number, number, number]; distance: number };
@@ -192,8 +224,8 @@ function rightAngled(source: Block, target: Block): Pt[] {
  * matches the chips, so long traces keep going around the chips between their ends.
  */
 export function traceCourse(source: Block, target: Block, route: EdgeRoute | undefined): Pt[] {
-  const flat = !source.node.parentId && !target.node.parentId && routeValid(route, source.node.position, target.node.position);
-  return chamfer(flat ? route!.points.map((point) => ({ x: point.x / UNIT, y: point.y / UNIT })) : rightAngled(source, target));
+  const usable = !source.node.parentId && !target.node.parentId && routeValid(route, source.node.position, target.node.position) ? route : null;
+  return chamfer(usable ? usable.points.map((point) => ({ x: point.x / UNIT, y: point.y / UNIT })) : rightAngled(source, target));
 }
 
 export const touches = (link: Link, id: string | null) => Boolean(id) && (link.source === id || link.target === id);
@@ -203,12 +235,12 @@ export function sceneTraces(edges: Edge[], blocks: Block[]): Link[] {
   const byId = new Map(blocks.map((block) => [block.id, block]));
   const links: Link[] = [];
   for (const edge of edges) {
-    const data = edge.data as { group?: RelationGroup; quiet?: boolean; reversed?: boolean; route?: EdgeRoute } | undefined;
+    const data = sceneEdgeData(edge);
     const source = byId.get(edge.source), target = byId.get(edge.target);
     if (!source || !target) continue;
-    const course = traceCourse(source, target, data?.route);
+    const course = traceCourse(source, target, data.route);
     links.push({
-      id: edge.id, source: edge.source, target: edge.target, group: data?.group || 'link', reversed: Boolean(data?.reversed), quiet: Boolean(data?.quiet),
+      id: edge.id, source: edge.source, target: edge.target, group: data.group || 'link', reversed: Boolean(data.reversed), quiet: Boolean(data.quiet),
       points: course.map((point): [number, number, number] => [point.x, TRACE_Y, point.y]), path: resample(course),
     });
   }
@@ -242,7 +274,10 @@ export function bootDepths(blocks: Block[], links: Link[]): ReadonlyMap<string, 
     wave = next;
   }
   const deepest = Math.max(1, ...hops.values());
-  return new Map(blocks.map((block) => [block.id, hops.has(block.id) ? hops.get(block.id)! / deepest : 1]));
+  return new Map(blocks.map((block) => {
+    const hop = hops.get(block.id);
+    return [block.id, hop === undefined ? 1 : hop / deepest];
+  }));
 }
 
 /** A flat strip along a polyline: two vertices per point, mitred at corners, with the distance run so far. */
@@ -297,6 +332,46 @@ export function traceArrowhead(points: [number, number, number][], reversed: boo
   return null;
 }
 
+function* wrapLines(text: string, width: number, measure: (sample: string) => number): Generator<string> {
+  const tokens = text.match(/[A-Za-z0-9_./:@+-]+|\r?\n|[ \t]+|./gu) ?? [];
+  let line = '';
+  for (const token of tokens) {
+    if (token === '\n' || token === '\r\n') {
+      yield line.trimEnd();
+      line = '';
+      continue;
+    }
+    const isSpace = /^[ \t]+$/.test(token);
+    if (!line && isSpace) continue;
+    if (measure(line + token) <= width) {
+      line += token;
+      continue;
+    }
+    if (isSpace) {
+      yield line.trimEnd();
+      line = '';
+      continue;
+    }
+    if (line) {
+      yield line.trimEnd();
+      line = '';
+    }
+    if (measure(token) <= width) {
+      line = token;
+      continue;
+    }
+    for (const ch of token) {
+      if (line && measure(line + ch) > width) {
+        yield line.trimEnd();
+        line = ch;
+      } else {
+        line += ch;
+      }
+    }
+  }
+  if (line.trimEnd()) yield line.trimEnd();
+}
+
 /**
  * Word-aware mixed CJK + Latin wrapper: keeps Latin identifiers and paths intact across line
  * breaks while wrapping CJK characters cleanly, only splitting an oversized token if it cannot
@@ -304,76 +379,17 @@ export function traceArrowhead(points: [number, number, number][], reversed: boo
  */
 export function wrapText(text: string, width: number, lines: number, measure: (sample: string) => number): string[] {
   if (!text || lines <= 0 || width <= 0) return [];
-  const tokens = text.match(/[A-Za-z0-9_./:@+-]+|\r?\n|[ \t]+|./gu) ?? [];
   const out: string[] = [];
-  let line = '';
   let truncated = false;
-
-  const pushLine = (value: string) => {
-    out.push(value.trimEnd());
-    return out.length === lines;
-  };
-  const hasVisibleRest = (from: number) => tokens.slice(from).some((rest) => !/^\s+$/.test(rest));
-
-  for (let i = 0; i < tokens.length; i++) {
-    const token = tokens[i];
-    if (token === '\n' || token === '\r\n') {
-      if (pushLine(line)) {
-        line = '';
-        truncated = hasVisibleRest(i + 1);
-        break;
-      }
-      line = '';
-      continue;
+  for (const line of wrapLines(text, width, measure)) {
+    if (out.length < lines) {
+      out.push(line);
+    } else if (line) {
+      truncated = true;
+      break;
     }
-    const isSpace = /^[ \t]+$/.test(token);
-    if (!line && isSpace) continue;
-    const candidate = line + token;
-    if (measure(candidate) <= width) {
-      line = candidate;
-      continue;
-    }
-    if (isSpace) {
-      if (pushLine(line)) {
-        line = '';
-        truncated = hasVisibleRest(i + 1);
-        break;
-      }
-      line = '';
-      continue;
-    }
-    if (line) {
-      if (pushLine(line)) {
-        line = '';
-        truncated = true;
-        break;
-      }
-      line = '';
-    }
-    if (measure(token) <= width) {
-      line = token;
-      continue;
-    }
-    let broken = false;
-    for (const ch of token) {
-      if (line && measure(line + ch) > width) {
-        if (pushLine(line)) {
-          line = '';
-          truncated = true;
-          broken = true;
-          break;
-        }
-        line = ch;
-      } else {
-        line += ch;
-      }
-    }
-    if (broken) break;
   }
-
-  if (!truncated && line.trimEnd() && out.length < lines) {
-    out.push(line.trimEnd());
-  } else if (truncated && out.length === lines) {
+  if (truncated) {
     let last = out[lines - 1];
     while (last && measure(`${last}…`) > width) last = last.slice(0, -1);
     out[lines - 1] = `${last}…`;

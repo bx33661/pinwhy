@@ -101,42 +101,88 @@ window.__ModuleLoader__.load({ id: 'dsh-pinwhy', factory(require) {
       ['runtimeCli', 'nodeExecutable'].includes(key) && next[key] === '' ? { op: 'unset', path: [key] } : { op: 'set', path: [key], value: next[key] });
   }
 
+  const childrenOf = (children, rest) => rest.length ? rest : (Array.isArray(children) ? children : children != null ? [children] : []);
+
+  function SvgIcon({ size = 16, viewBox = '0 0 24 24', stroke = 'currentColor', strokeWidth = 2, children, ...props }, ...rest) {
+    const strokeProps = stroke ? { stroke, strokeWidth, strokeLinecap: 'round', strokeLinejoin: 'round' } : {};
+    return h('svg', { width: size, height: size, viewBox, fill: 'none', 'aria-hidden': true, ...strokeProps, ...props }, ...childrenOf(children, rest));
+  }
+
+  function SettingsCard({ title, description, children }, ...rest) {
+    return h('section', { className: 'pinwhy-settings-card' },
+      h('div', { className: 'pinwhy-settings-header' },
+        h('h4', { className: 'pinwhy-settings-title' }, title),
+        h('p', { className: 'pinwhy-settings-desc' }, description)),
+      ...childrenOf(children, rest));
+  }
+
+  function Field({ label, hint, children }, ...rest) {
+    return h('div', { className: 'pinwhy-field' },
+      h('label', { className: 'pinwhy-field-label' },
+        h('span', null, label),
+        hint ? h('span', { className: 'pinwhy-field-hint' }, hint) : null),
+      ...childrenOf(children, rest));
+  }
+
+  function ProjectRow({ row, index, onUpdate, onRemove, t }) {
+    return h('div', { key: index, className: 'pinwhy-project-card' },
+      h('div', { className: 'pinwhy-project-card-header' },
+        h('div', { className: 'pinwhy-project-badge' },
+          SvgIcon({ size: 14, strokeWidth: 1.8 }, h('path', { d: 'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z' })),
+          h('span', null, `${t('project')} #${index + 1}`)),
+        h('button', { type: 'button', className: 'pinwhy-btn pinwhy-btn-danger', onClick: () => onRemove(index) },
+          SvgIcon({ size: 12 }, h('polyline', { points: '3 6 5 6 21 6' }), h('path', { d: 'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2' })),
+          h('span', null, t('remove')))),
+      h('div', { className: 'pinwhy-project-fields' },
+        Field({ label: t('project') },
+          h('input', { required: true, className: 'pinwhy-input', value: row.workspace, placeholder: '/absolute/path/to/project',
+            onChange: event => onUpdate(index, { workspace: event.target.value }) })),
+        Field({ label: t('board') },
+          h('input', { className: 'pinwhy-input', value: row.boardRoot, placeholder: t('boardPlaceholder'),
+            onChange: event => onUpdate(index, { boardRoot: event.target.value }) }))));
+  }
+
   function Editor({ form, t, useWorkspaces }) {
     const workspaces = (typeof useWorkspaces === 'function' ? useWorkspaces(state => state.items) : null) || [];
     const state = form?.state;
     const [draft, setDraft] = React.useState(() => initial(state?.value));
     const [base, setBase] = React.useState(() => initial(state?.value));
     const [revision, setRevision] = React.useState(state?.revision);
-    const [dirty, setDirty] = React.useState(false), [busy, setBusy] = React.useState(false), [notice, setNotice] = React.useState('');
-    const reset = () => { const next = initial(state?.value); setDraft(next); setBase(next); setRevision(state?.revision); setDirty(false); setNotice(''); };
+    const [dirty, setDirty] = React.useState(false), [busy, setBusy] = React.useState(false), [notice, setNotice] = React.useState(null);
+    const reset = () => { const next = initial(state?.value); setDraft(next); setBase(next); setRevision(state?.revision); setDirty(false); setNotice(null); };
     React.useEffect(() => {
       if (!dirty && state?.revision !== revision) {
         const next = initial(state?.value); setDraft(next); setBase(next); setRevision(state?.revision);
       }
     }, [state?.revision, state?.status, dirty, revision]);
-    const change = (key, value) => { setDraft(old => ({ ...old, [key]: value })); setDirty(true); setNotice(''); };
+    const change = (key, value) => { setDraft(old => ({ ...old, [key]: value })); setDirty(true); setNotice(null); };
+    const updateProject = (index, patch) => change('projects', draft.projects.map((item, i) => i === index ? { ...item, ...patch } : item));
+    const removeProject = index => change('projects', draft.projects.filter((_, i) => i !== index));
+    const addWorkspace = path => {
+      if (path && !draft.projects.some(p => p.workspace === path)) change('projects', [...draft.projects, { workspace: path, boardRoot: '' }]);
+    };
     const ready = state?.status === 'ready' && state.writable && typeof revision === 'number';
     async function save(event) {
       event.preventDefault(); if (!ready || busy) return;
-      setBusy(true); setNotice('');
+      setBusy(true); setNotice(null);
       try {
         const accepted = await form.mutate(edits(draft, base), revision);
-        if (accepted) { setDirty(false); setBase(draft); setNotice(t('saved')); }
-        else setNotice(t('conflict'));
-      } catch (error) { setNotice(`${t('conflict')} ${String(error.message ?? error)}`); }
+        if (accepted) { setDirty(false); setBase(draft); setNotice({ ok: true, text: t('saved') }); }
+        else setNotice({ ok: false, text: t('conflict') });
+      } catch (error) { setNotice({ ok: false, text: `${t('conflict')} ${String(error.message ?? error)}` }); }
       finally { setBusy(false); }
     }
+    let statusText = null;
+    if (notice) statusText = h('span', { className: notice.ok ? 'pinwhy-notice-success' : 'pinwhy-notice-error' }, `${notice.ok ? '✓' : '⚠'} ${notice.text}`);
+    else if (!state || state.status === 'loading') statusText = h('span', null, t('loading'));
+    else if (!ready) statusText = h('span', null, t('readonly'));
+
     return h('form', { onSubmit: save, 'data-pinwhy-settings': true, className: 'pinwhy-settings-wrap' },
       h('fieldset', { disabled: !ready || busy, style: { border: 0, padding: 0, margin: 0, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 18 } },
         h('header', { className: 'pinwhy-settings-header' },
-          h('div', { className: 'pinwhy-settings-title' },
-            h(PinwhyIcon, { size: 18 }),
-            h('h3', null, t('settings'))),
+          h('div', { className: 'pinwhy-settings-title' }, h(PinwhyIcon, { size: 18 }), h('h3', null, t('settings'))),
           h('p', { className: 'pinwhy-settings-desc' }, t('summary'))),
-        h('section', { className: 'pinwhy-settings-card' },
-          h('div', { className: 'pinwhy-settings-header' },
-            h('h4', { className: 'pinwhy-settings-title' }, t('projectsSection')),
-            h('p', { className: 'pinwhy-settings-desc' }, t('projectsSectionDesc'))),
+        SettingsCard({ title: t('projectsSection'), description: t('projectsSectionDesc') },
           h('label', { className: 'pinwhy-toggle-row' },
             h('div', { className: 'pinwhy-toggle-info' },
               h('span', { className: 'pinwhy-toggle-title' }, t('autoDiscover')),
@@ -145,85 +191,33 @@ window.__ModuleLoader__.load({ id: 'dsh-pinwhy', factory(require) {
               onChange: event => change('autoDiscover', event.target.checked) })),
           draft.projects.length === 0
             ? h('div', { className: 'pinwhy-projects-empty' }, t('emptyProjects'))
-            : h('div', { className: 'pinwhy-projects-list' },
-              ...draft.projects.map((row, index) => h('div', { key: index, className: 'pinwhy-project-card' },
-                h('div', { className: 'pinwhy-project-card-header' },
-                  h('div', { className: 'pinwhy-project-badge' },
-                    h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true }, h('path', { d: 'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z' })),
-                    h('span', null, `${t('project')} #${index + 1}`)),
-                  h('button', { type: 'button', className: 'pinwhy-btn pinwhy-btn-danger',
-                    onClick: () => change('projects', draft.projects.filter((_, i) => i !== index)) },
-                    h('svg', { width: 12, height: 12, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true }, h('polyline', { points: '3 6 5 6 21 6' }), h('path', { d: 'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2' })),
-                    h('span', null, t('remove')))),
-                h('div', { className: 'pinwhy-project-fields' },
-                  h('div', { className: 'pinwhy-field' },
-                    h('label', { className: 'pinwhy-field-label' }, t('project')),
-                    h('input', { required: true, className: 'pinwhy-input', value: row.workspace, placeholder: '/absolute/path/to/project',
-                      onChange: event => change('projects', draft.projects.map((item, i) => i === index ? { ...item, workspace: event.target.value } : item)) })),
-                  h('div', { className: 'pinwhy-field' },
-                    h('label', { className: 'pinwhy-field-label' }, t('board')),
-                    h('input', { className: 'pinwhy-input', value: row.boardRoot, placeholder: t('boardPlaceholder'),
-                      onChange: event => change('projects', draft.projects.map((item, i) => i === index ? { ...item, boardRoot: event.target.value } : item)) })))))),
+            : h('div', { className: 'pinwhy-projects-list' }, ...draft.projects.map((row, index) => ProjectRow({ row, index, onUpdate: updateProject, onRemove: removeProject, t }))),
           h('div', { className: 'pinwhy-project-add-bar' },
             h('select', { className: 'pinwhy-input', style: { flex: 1 }, value: '', 'aria-label': t('workspacePick'),
-              onChange: event => {
-                const workspace = workspaces.find(w => w.path === event.target.value);
-                if (workspace && !draft.projects.some(p => p.workspace === workspace.path)) {
-                  change('projects', [...draft.projects, { workspace: workspace.path, boardRoot: '' }]);
-                }
-              } },
+              onChange: event => addWorkspace(workspaces.find(w => w.path === event.target.value)?.path) },
               h('option', { value: '' }, t('workspacePick')),
               ...workspaces.map(w => h('option', { key: w.id, value: w.path, disabled: draft.projects.some(p => p.workspace === w.path) }, w.path))),
             h('button', { type: 'button', className: 'pinwhy-btn pinwhy-btn-outline',
               onClick: () => change('projects', [...draft.projects, { workspace: '', boardRoot: '' }]) }, `+ ${t('addManual')}`))),
-        h('section', { className: 'pinwhy-settings-card' },
-          h('div', { className: 'pinwhy-settings-header' },
-            h('h4', { className: 'pinwhy-settings-title' }, t('runtimeSection')),
-            h('p', { className: 'pinwhy-settings-desc' }, t('runtimeSectionDesc'))),
+        SettingsCard({ title: t('runtimeSection'), description: t('runtimeSectionDesc') },
           h('div', { className: 'pinwhy-grid-2' },
-            h('div', { className: 'pinwhy-field' },
-              h('label', { className: 'pinwhy-field-label' },
-                h('span', null, t('runtime'))),
-              h('input', { className: 'pinwhy-input', value: draft.runtimeCli, placeholder: t('runtimePlaceholder'),
-                onChange: event => change('runtimeCli', event.target.value) })),
-            h('div', { className: 'pinwhy-field' },
-              h('label', { className: 'pinwhy-field-label' },
-                h('span', null, t('node'))),
-              h('input', { className: 'pinwhy-input', value: draft.nodeExecutable, placeholder: t('nodePlaceholder'),
-                onChange: event => change('nodeExecutable', event.target.value) })))),
-        h('section', { className: 'pinwhy-settings-card' },
-          h('div', { className: 'pinwhy-settings-header' },
-            h('h4', { className: 'pinwhy-settings-title' }, t('limitsSection')),
-            h('p', { className: 'pinwhy-settings-desc' }, t('limitsSectionDesc'))),
+            Field({ label: t('runtime') }, h('input', { className: 'pinwhy-input', value: draft.runtimeCli, placeholder: t('runtimePlaceholder'),
+              onChange: event => change('runtimeCli', event.target.value) })),
+            Field({ label: t('node') }, h('input', { className: 'pinwhy-input', value: draft.nodeExecutable, placeholder: t('nodePlaceholder'),
+              onChange: event => change('nodeExecutable', event.target.value) })))),
+        SettingsCard({ title: t('limitsSection'), description: t('limitsSectionDesc') },
           h('div', { className: 'pinwhy-grid-2' },
-            h('div', { className: 'pinwhy-field' },
-              h('label', { className: 'pinwhy-field-label' },
-                h('span', null, t('timeout')),
-                h('span', { className: 'pinwhy-field-hint' }, t('timeoutHint'))),
+            Field({ label: t('timeout'), hint: t('timeoutHint') },
               h('input', { type: 'number', required: true, min: 50, max: 120000, step: 1, className: 'pinwhy-input', value: draft.timeoutMs,
                 onChange: event => change('timeoutMs', Number(event.target.value)) })),
-            h('div', { className: 'pinwhy-field' },
-              h('label', { className: 'pinwhy-field-label' },
-                h('span', null, t('output')),
-                h('span', { className: 'pinwhy-field-hint' }, t('outputHint'))),
+            Field({ label: t('output'), hint: t('outputHint') },
               h('input', { type: 'number', required: true, min: 1024, max: 16777216, step: 1, className: 'pinwhy-input', value: draft.maxOutputBytes,
                 onChange: event => change('maxOutputBytes', Number(event.target.value)) })))),
         h('div', { className: 'pinwhy-guide-callout' },
-          h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true },
-            h('circle', { cx: 12, cy: 12, r: 10 }),
-            h('line', { x1: 12, y1: 16, x2: 12, y2: 12 }),
-            h('line', { x1: 12, y1: 8, x2: 12.01, y2: 8 })),
+          SvgIcon({ size: 16 }, h('circle', { cx: 12, cy: 12, r: 10 }), h('line', { x1: 12, y1: 16, x2: 12, y2: 12 }), h('line', { x1: 12, y1: 8, x2: 12.01, y2: 8 })),
           h('span', null, t('guide'))),
         h('footer', { className: 'pinwhy-settings-footer' },
-          h('div', { role: 'status', className: 'pinwhy-notice' },
-            notice ? (notice.includes(t('saved'))
-              ? h('span', { className: 'pinwhy-notice-success' }, `✓ ${notice}`)
-              : h('span', { className: 'pinwhy-notice-error' }, `⚠ ${notice}`))
-              : (!state || state.status === 'loading'
-                ? h('span', null, t('loading'))
-                : !ready
-                  ? h('span', null, t('readonly'))
-                  : null)),
+          h('div', { role: 'status', className: 'pinwhy-notice' }, statusText),
           h('div', { className: 'pinwhy-actions-group' },
             h('button', { type: 'button', className: 'pinwhy-btn pinwhy-btn-outline', disabled: busy || state?.status !== 'ready', onClick: reset }, t('reload')),
             h('button', { type: 'submit', className: 'pinwhy-btn pinwhy-btn-primary', disabled: !dirty }, t('save'))))));
@@ -244,13 +238,14 @@ window.__ModuleLoader__.load({ id: 'dsh-pinwhy', factory(require) {
     const meta = phase === 'result' && block?.isError === false ? cardMeta(block, toolName) : null;
     const failed = phase === 'result' && block?.isError === true;
     const state = phase === 'preparing' ? 'preparing' : phase === 'result' ? (failed ? 'failed' : 'done') : 'running';
+    const accent = failed ? 'var(--dsw-alias-state-error-primary, #db5050)' : phase === 'result' ? '#10b981' : null;
     const raw = (() => { try { return JSON.stringify({ call: block?.call, args: block?.argsRaw, content: block?.content, error: block?.error, meta: block?.meta }, null, 2); } catch { return 'Invalid recorded result'; } })();
 
-    return h('article', { 'data-pinwhy-tool': toolName, style: { ...box, borderRadius: 12, background: 'var(--dsw-alias-card-fill, transparent)', borderLeft: `3px solid ${failed ? 'var(--dsw-alias-state-error-primary, #db5050)' : phase === 'result' ? '#10b981' : 'var(--dsw-alias-border-l2, #d4d4d8)'}` } },
+    return h('article', { 'data-pinwhy-tool': toolName, style: { ...box, borderRadius: 12, background: 'var(--dsw-alias-card-fill, transparent)', borderLeft: `3px solid ${accent ?? 'var(--dsw-alias-border-l2, #d4d4d8)'}` } },
       h('header', { style: { display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 13 } },
         h('span', null, t(action)),
         h('span', { style: { opacity: .4 } }, '·'),
-        h('span', { style: { fontSize: 12, fontWeight: 500, color: failed ? 'var(--dsw-alias-state-error-primary, #db5050)' : phase === 'result' ? '#10b981' : 'var(--dsw-alias-label-tertiary, #71717a)' } }, t(state))),
+        h('span', { style: { fontSize: 12, fontWeight: 500, color: accent ?? 'var(--dsw-alias-label-tertiary, #71717a)' } }, t(state))),
       meta ? h(React.Fragment, null,
         meta.summary ? h('p', null, bounded(meta.summary)) : null,
         h('small', { style: { display: 'block', opacity: .7 } }, [meta.nodeId, meta.agentId, meta.boardRoot].filter(Boolean).map(bounded).join(' · ')),
@@ -265,7 +260,7 @@ window.__ModuleLoader__.load({ id: 'dsh-pinwhy', factory(require) {
   }
 
   function PinwhyIcon({ size = 16, ...props }) {
-    return h('svg', { width: size, height: size, viewBox: '0 0 128 128', fill: 'none', 'aria-hidden': true, ...props },
+    return SvgIcon({ size, viewBox: '0 0 128 128', stroke: null, ...props },
       h('path', { d: 'M73 20H38C28.059 20 20 28.059 20 38V90C20 99.941 28.059 108 38 108H90C99.941 108 108 99.941 108 90V65', stroke: 'currentColor', strokeWidth: 12, strokeLinecap: 'round', strokeLinejoin: 'round' }),
       h('path', { d: 'M46 80L76 50', stroke: 'currentColor', strokeWidth: 12, strokeLinecap: 'round' }),
       h('circle', { cx: 98, cy: 28, r: 10, fill: 'currentColor' }));
@@ -454,18 +449,28 @@ window.__ModuleLoader__.load({ id: 'dsh-pinwhy', factory(require) {
     return { code, message };
   }
 
-  /**
-   * Read-only Pinwhy workspace embedded from the Host's viewer mount.
-   * The Host owns the runtime process and its lifetime: unmount only aborts the
-   * in-flight open request, and a stale response never replaces a newer session.
-   */
-  function ViewerPanel({ sessionId, t, openViewer, retainSession, hostPresentation, referenceNode, focus }) {
-    const [attempt, setAttempt] = React.useState(0);
-    const [appearance] = React.useState(() => hostPresentation?.getSnapshot() ?? { theme: 'light' });
-    const frameRef = React.useRef(null);
+  const REMEDY_BY_CODE = {
+    RUNTIME_INCOMPATIBLE: 'upgradeHint',
+    RUNTIME_MISSING: 'runtimeHint',
+    NOT_ENABLED: 'setupHint',
+    BOARD_NOT_INITIALIZED: 'setupHint',
+  };
+
+  const STATUS_VIEW = {
+    empty: { role: 'status', heading: 'chooseSession', message: () => 'noSession' },
+    loading: { role: 'status', heading: 'viewerLoading', message: () => 'viewerLoadingHint' },
+    error: { role: 'alert', heading: 'viewerFailed', message: code => REMEDY_BY_CODE[code] ?? 'retryHint' },
+  };
+
+  function frameOrigin(frame) {
+    if (!frame?.src) return null;
+    try { return new URL(frame.src, typeof window !== 'undefined' && window.location ? window.location.href : undefined).origin; }
+    catch { return null; }
+  }
+
+  function useViewerSession({ sessionId, attempt, boardRoot, openViewer, retainSession }) {
     const [result, setResult] = React.useState({ status: 'loading', for: undefined, attempt: 0 });
     const [loadedFrame, setLoadedFrame] = React.useState(null);
-    const focused = React.useRef(null);
     React.useEffect(() => {
       if (typeof sessionId !== 'string' || sessionId === '') return undefined;
       const controller = new AbortController();
@@ -482,42 +487,32 @@ window.__ModuleLoader__.load({ id: 'dsh-pinwhy', factory(require) {
         if (response?.ok !== true) { fail(response?.error); return; }
         const value = viewerValue(response.value);
         if (!value) { fail({ code: 'VIEWER_INVALID', message: '' }); return; }
-        if (focus?.boardRoot && focus.boardRoot !== value.boardRoot) { fail({ code: 'NOT_ENABLED', message: 'The recorded node belongs to a different board.' }); return; }
+        if (boardRoot && boardRoot !== value.boardRoot) { fail({ code: 'NOT_ENABLED', message: 'The recorded node belongs to a different board.' }); return; }
         setResult({ status: 'ready', for: sessionId, attempt, value });
       })().catch(fail);
       return () => { live = false; controller.abort(); reference?.release(); };
-    }, [sessionId, attempt, focus?.boardRoot]);
+    }, [sessionId, attempt, boardRoot]);
 
     const settled = typeof sessionId !== 'string' || !sessionId
       ? { status: 'empty' } : result.for === sessionId && result.attempt === attempt ? result : { status: 'loading' };
     const ready = settled.status === 'ready' ? settled.value : null;
     const frameKey = ready ? `${ready.viewerId}:${attempt}` : null;
-    const frameLoading = ready && loadedFrame !== frameKey;
-    const reload = () => setAttempt(value => value + 1);
-    const sendAppearance = () => {
-      const frame = frameRef.current;
-      if (frame?.contentWindow) frame.contentWindow.postMessage({ type: 'pinwhy:appearance', ...(hostPresentation?.getSnapshot() ?? appearance) }, new URL(frame.src).origin);
-    };
-    const sendFocus = () => {
-      const frame = frameRef.current;
-      const key = focus?.nodeId && (!focus.boardRoot || focus.boardRoot === ready?.boardRoot) ? `${frameKey}:${focus.revision}` : null;
-      if (frame?.contentWindow && key && focused.current !== key) {
-        frame.contentWindow.postMessage({ type: 'pinwhy:navigate', nodeId: focus.nodeId, requestId: key }, new URL(frame.src).origin);
-        focused.current = key;
-      }
-    };
-    React.useEffect(() => hostPresentation?.subscribe(sendAppearance), [hostPresentation, ready?.viewerId]);
-    React.useEffect(() => { if (!frameLoading) sendFocus(); }, [focus?.revision, frameLoading, frameKey]);
+    const frameLoading = Boolean(ready && loadedFrame !== frameKey);
+    return { settled, ready, frameKey, frameLoading, markFrameLoaded: () => setLoadedFrame(frameKey) };
+  }
+
+  const validRefId = (value, max) => typeof value === 'string' && value.length > 0 && value.length <= max;
+
+  function useReferenceBridge({ frameRef, ready, referenceNode, sessionId, t }) {
     React.useEffect(() => {
-      if (!ready || !referenceNode || typeof window.addEventListener !== 'function') return undefined;
+      if (!ready || !referenceNode || typeof window === 'undefined' || typeof window.addEventListener !== 'function') return undefined;
       const controller = new AbortController();
       let pending = false;
       const receive = async event => {
-        const frame = frameRef.current;
-        if (!frame || event.source !== frame.contentWindow || event.origin !== new URL(frame.src).origin) return;
+        const frame = frameRef.current, origin = frameOrigin(frame);
+        if (!frame || !origin || event.source !== frame.contentWindow || event.origin !== origin) return;
         const message = event.data;
-        if (message?.type !== 'pinwhy:reference' || typeof message.nodeId !== 'string' || !message.nodeId || message.nodeId.length > 256
-          || typeof message.requestId !== 'string' || !message.requestId || message.requestId.length > 128) return;
+        if (message?.type !== 'pinwhy:reference' || !validRefId(message.nodeId, 256) || !validRefId(message.requestId, 128)) return;
         const reply = (ok, text) => frame.contentWindow.postMessage({ type: 'pinwhy:reference-result', requestId: message.requestId, ok, message: text }, event.origin);
         if (pending) { reply(false, t('referenceFailed')); return; }
         pending = true;
@@ -529,35 +524,68 @@ window.__ModuleLoader__.load({ id: 'dsh-pinwhy', factory(require) {
       };
       window.addEventListener('message', receive);
       return () => { controller.abort(); window.removeEventListener('message', receive); };
-    }, [ready?.viewerId, referenceNode, sessionId]);
+    }, [ready?.viewerId, ready?.boardRoot, referenceNode, sessionId]);
+  }
 
-    let body;
-    if (ready) body = h('div', { className: 'pinwhy-viewer-content' },
-      h('iframe', {
-        key: frameKey, ref: frameRef, src: embeddedUrl(ready.url, appearance, Boolean(referenceNode)), title: t('boardTitle'), 'data-pinwhy-viewer': ready.viewerId,
-        onLoad: () => { sendAppearance(); focused.current = null; setLoadedFrame(frameKey); sendFocus(); }, style: { display: 'block', flex: 1, width: '100%', minHeight: 0, border: 0 },
-      }),
-      frameLoading ? h('div', { className: 'pinwhy-viewer-state pinwhy-frame-loading', role: 'status' },
-        h('span', { className: 'pinwhy-spinner', 'aria-hidden': true }), h('p', null, t('viewerLoading'))) : null);
-    else {
-      const code = settled.error?.code;
-      const remedy = code === 'RUNTIME_INCOMPATIBLE' ? 'upgradeHint'
-        : code === 'RUNTIME_MISSING' ? 'runtimeHint'
-        : ['NOT_ENABLED', 'BOARD_NOT_INITIALIZED'].includes(code) ? 'setupHint' : 'retryHint';
-      body = h('div', { className: 'pinwhy-viewer-state', role: settled.status === 'error' ? 'alert' : 'status', 'data-pinwhy-viewer-error': code },
-        settled.status === 'loading' ? h('span', { className: 'pinwhy-spinner', 'aria-hidden': true }) : h(PinwhyIcon, { size: 32 }),
-        h('h2', null, t(settled.status === 'empty' ? 'chooseSession' : settled.status === 'error' ? 'viewerFailed' : 'viewerLoading')),
-        h('p', null, t(settled.status === 'empty' ? 'noSession' : settled.status === 'error' ? remedy : 'viewerLoadingHint')),
-        settled.status === 'error' ? h('button', { type: 'button', className: 'pinwhy-viewer-retry', onClick: reload }, t('viewerReconnect')) : null,
-        settled.status === 'error' ? h('details', null, h('summary', null, t('viewerErrorDetails')), `${code} — ${settled.error.message}`) : null);
-    }
-    return h('div', { className: 'pinwhy-viewer', 'aria-busy': settled.status === 'loading' || Boolean(frameLoading), 'data-pinwhy-viewer-pane': true, 'data-pinwhy-viewer-status': settled.status },
+  function ViewerStatusView({ status, error, onRetry, t }) {
+    const spec = STATUS_VIEW[status] ?? STATUS_VIEW.loading;
+    const code = error?.code;
+    return h('div', { className: 'pinwhy-viewer-state', role: spec.role, 'data-pinwhy-viewer-error': code },
+      status === 'loading' ? h('span', { className: 'pinwhy-spinner', 'aria-hidden': true }) : h(PinwhyIcon, { size: 32 }),
+      h('h2', null, t(spec.heading)),
+      h('p', null, t(spec.message(code))),
+      status === 'error' ? h('button', { type: 'button', className: 'pinwhy-viewer-retry', onClick: onRetry }, t('viewerReconnect')) : null,
+      status === 'error' ? h('details', null, h('summary', null, t('viewerErrorDetails')), `${code} — ${error.message}`) : null);
+  }
+
+  /**
+   * Read-only Pinwhy workspace embedded from the Host's viewer mount.
+   * The Host owns the runtime process and its lifetime: unmount only aborts the
+   * in-flight open request, and a stale response never replaces a newer session.
+   */
+  function ViewerPanel({ sessionId, t, openViewer, retainSession, hostPresentation, referenceNode, focus }) {
+    const [attempt, setAttempt] = React.useState(0);
+    const [appearance] = React.useState(() => hostPresentation?.getSnapshot() ?? { theme: 'light' });
+    const frameRef = React.useRef(null);
+    const focused = React.useRef(null);
+    const { settled, ready, frameKey, frameLoading, markFrameLoaded } = useViewerSession({
+      sessionId, attempt, boardRoot: focus?.boardRoot, openViewer, retainSession,
+    });
+    const reload = () => setAttempt(value => value + 1);
+    const postToFrame = payload => {
+      const frame = frameRef.current, origin = frameOrigin(frame);
+      if (frame?.contentWindow && origin) { frame.contentWindow.postMessage(payload, origin); return true; }
+      return false;
+    };
+    const sendAppearance = () => postToFrame({ type: 'pinwhy:appearance', ...(hostPresentation?.getSnapshot() ?? appearance) });
+    const sendFocus = () => {
+      const key = focus?.nodeId && (!focus.boardRoot || focus.boardRoot === ready?.boardRoot) ? `${frameKey}:${focus.revision}` : null;
+      if (key && focused.current !== key && postToFrame({ type: 'pinwhy:navigate', nodeId: focus.nodeId, requestId: key })) {
+        focused.current = key;
+      }
+    };
+    React.useEffect(() => hostPresentation?.subscribe(sendAppearance), [hostPresentation, ready?.viewerId]);
+    React.useEffect(() => { if (!frameLoading) sendFocus(); }, [focus?.revision, frameLoading, frameKey]);
+    useReferenceBridge({ frameRef, ready, referenceNode, sessionId, t });
+
+    const reloadLabel = t(settled.status === 'error' ? 'viewerReconnect' : 'viewerReload');
+    const body = ready
+      ? h('div', { className: 'pinwhy-viewer-content' },
+        h('iframe', {
+          key: frameKey, ref: frameRef, src: embeddedUrl(ready.url, appearance, Boolean(referenceNode)), title: t('boardTitle'), 'data-pinwhy-viewer': ready.viewerId,
+          onLoad: () => { sendAppearance(); focused.current = null; markFrameLoaded(); sendFocus(); }, style: { display: 'block', flex: 1, width: '100%', minHeight: 0, border: 0 },
+        }),
+        frameLoading ? h('div', { className: 'pinwhy-viewer-state pinwhy-frame-loading', role: 'status' },
+          h('span', { className: 'pinwhy-spinner', 'aria-hidden': true }), h('p', null, t('viewerLoading'))) : null)
+      : ViewerStatusView({ status: settled.status, error: settled.error, onRetry: reload, t });
+
+    return h('div', { className: 'pinwhy-viewer', 'aria-busy': settled.status === 'loading' || frameLoading, 'data-pinwhy-viewer-pane': true, 'data-pinwhy-viewer-status': settled.status },
       h('div', { className: 'pinwhy-viewer-bar' },
         ready ? h('span', { className: 'pinwhy-board-name', 'data-pinwhy-board-root': true, title: ready.boardRoot }, boardName(ready.boardRoot)) : h('span', null, 'Pinwhy'),
         h('span', { 'aria-hidden': true }, '·'), h('span', { 'data-pinwhy-read-only': true }, t('readOnlyBadge')),
         sessionId ? h('button', { type: 'button', className: 'pinwhy-viewer-refresh', 'data-pinwhy-reload': true,
-          title: t(settled.status === 'error' ? 'viewerReconnect' : 'viewerReload'), 'aria-label': t(settled.status === 'error' ? 'viewerReconnect' : 'viewerReload'), onClick: reload },
-          h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, 'aria-hidden': true }, h('path', { d: 'M20 7v5h-5M4 17v-5h5M6.1 6.1a8 8 0 0 1 13 2.9M4.9 15a8 8 0 0 0 13 2.9' }))) : null),
+          title: reloadLabel, 'aria-label': reloadLabel, onClick: reload },
+          SvgIcon({ size: 14, strokeWidth: 1.5 }, h('path', { d: 'M20 7v5h-5M4 17v-5h5M6.1 6.1a8 8 0 0 1 13 2.9M4.9 15a8 8 0 0 0 13 2.9' }))) : null),
       body);
   }
 

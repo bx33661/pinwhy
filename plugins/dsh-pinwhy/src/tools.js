@@ -140,10 +140,19 @@ const operations = [
       return ['batch', '--json', `--request-id=${reqId}`];
     },
     input(args) {
-      return args.operations.map((op) => JSON.stringify(op)).join('\n') + '\n';
+      return args.operations.map((op) => {
+        if (!op || typeof op !== 'object' || Array.isArray(op)) throw new TypeError('each batch operation must be an object');
+        return JSON.stringify(op);
+      }).join('\n') + '\n';
     },
   },
 ];
+
+const toolOutput = (name, schema) => ({
+  schema,
+  render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
+  presentationMeta: (args, value) => presentationMeta(name, args, value),
+});
 
 /** Runtime-neutral specs are wrapped by the host's own defineTool, never a vendored SDK. */
 export function toolSpecifications(config, bridge, authorizeWrite) {
@@ -151,11 +160,7 @@ export function toolSpecifications(config, bridge, authorizeWrite) {
   const result = operations.map(({ command, validate, access, agent, input, ...spec }) => ({
     ...spec,
     ...presenters(spec.name),
-    output: {
-      schema: outputSchema,
-      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
-      presentationMeta: (args, value) => presentationMeta(spec.name, args, value),
-    },
+    output: toolOutput(spec.name, outputSchema),
     async execute(args, exec) {
       const current = snapshot();
       const argv = command(args), participant = agent?.(args);
@@ -171,11 +176,7 @@ export function toolSpecifications(config, bridge, authorizeWrite) {
     name: 'pinwhy_diagnose',
     description: 'Read-only pinwhy setup diagnosis for this Session: CLI, configured project, board and current host write policy. Works before project enablement. Returns issues and remedies; never initializes, writes, changes policy or selects a next step.',
     parameters: {}, ...presenters('pinwhy_diagnose'),
-    output: {
-      schema: diagnosticOutput,
-      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
-      presentationMeta: (args, value) => presentationMeta('pinwhy_diagnose', args, value),
-    },
+    output: toolOutput('pinwhy_diagnose', diagnosticOutput),
     execute: (_args, exec) => diagnose(snapshot(), bridge, exec, authorizeWrite),
   });
   return result;

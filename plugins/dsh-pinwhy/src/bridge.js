@@ -41,6 +41,16 @@ export function bound(argv, scope, access, agentId = scope.agentId) {
   return [argv[0], ...flags, ...argv.slice(1)];
 }
 
+export function cliEnv(extra = {}) {
+  // Copy instead of changing process.env: each concurrent Session owns its identity and board.
+  // Root, identity and viewer port travel as flags; inherited env must never steer another board.
+  const { PINWHY_CWD: _cwd, PINWHY_AGENT: _agent, PINWHY_PORT: _port, ...inherited } = process.env;
+  const env = { ...inherited, ...extra };
+  // Desktop's executable is Electron, not a stand-alone node binary.
+  if (process.versions.electron) env.ELECTRON_RUN_AS_NODE = '1';
+  return env;
+}
+
 /** A process boundary keeps pinwhy's synchronous I/O and locks out of the DSH loop. */
 export class CliBridge {
   #operations = new Set();
@@ -103,20 +113,15 @@ export class CliBridge {
 
   #execute(argv, cwd, signal, config, stdin) {
     return new Promise((resolve, reject) => {
-      // Copy instead of changing process.env: each concurrent Session owns its identity and board.
-      // Root and identity travel as flags; an inherited value must not pick another board or author.
-      const { PINWHY_CWD: _cwd, PINWHY_AGENT: _agent, ...inherited } = process.env;
-      const env = {
-        ...inherited,
+      const env = cliEnv({
         PINWHY_LOCK_TIMEOUT_MS: String(Math.min(3000, config.timeoutMs)),
         NO_COLOR: '1',
-      };
-      // Desktop's executable is Electron, not a stand-alone node binary.
-      if (process.versions.electron) env.ELECTRON_RUN_AS_NODE = '1';
+      });
       const child = spawn(config.nodeExecutable, argv, {
         cwd, env, shell: false, stdio: [stdin ? 'pipe' : 'ignore', 'pipe', 'pipe'],
       });
       if (stdin) {
+        child.stdin.on('error', () => {});
         child.stdin.end(stdin, 'utf8');
       }
       const stdout = [], stderr = [];

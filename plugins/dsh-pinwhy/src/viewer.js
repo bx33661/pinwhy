@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import http from 'node:http';
 import { pipeline } from 'node:stream';
-import { bound } from './bridge.js';
+import { bound, cliEnv } from './bridge.js';
 import { PinwhyError } from './config.js';
 import { selectScope } from './scope.js';
 
@@ -17,28 +17,49 @@ function nodeIdentity(value) {
   return value;
 }
 
-/** `pinwhy/node.read` payloads are exact: a Session identity plus one node identity. */
-function nodeReadPayload(payload) {
+/** Exact-key object validation shared across viewer RPC handlers. */
+function sessionPayload(payload, extraKeys = [], label = 'a Session identity') {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-    throw new PinwhyError('INVALID_ARGUMENT', 'Expected a Session and one node identity.');
+    throw new PinwhyError('INVALID_ARGUMENT', `Expected ${label}.`);
   }
+  const expected = ['sessionId', ...extraKeys];
   const keys = Object.keys(payload);
-  if (keys.length !== 2 || !keys.includes('sessionId') || !keys.includes('nodeId')) {
-    throw new PinwhyError('INVALID_ARGUMENT', 'Expected exactly a Session and one node identity.');
+  if (keys.length !== expected.length || !expected.every(key => keys.includes(key))) {
+    throw new PinwhyError('INVALID_ARGUMENT', `Expected exactly ${label}.`);
   }
   if (typeof payload.sessionId !== 'string' || !payload.sessionId.trim() || payload.sessionId.includes('\0')) {
     throw new PinwhyError('INVALID_ARGUMENT', 'Expected a Session identity.');
   }
-  return { sessionId: payload.sessionId, nodeId: nodeIdentity(payload.nodeId) };
+  return payload;
+}
+
+/** `pinwhy/node.read` payloads are exact: a Session identity plus one node identity. */
+function nodeReadPayload(payload) {
+  const { sessionId, nodeId } = sessionPayload(payload, ['nodeId'], 'a Session and one node identity');
+  return { sessionId, nodeId: nodeIdentity(nodeId) };
+}
+
+/** Validate the single JSON startup line emitted by `pinwhy serve --ephemeral --json`. */
+function parseViewerReadyLine(line, boardRoot, basePath) {
+  try {
+    const value = JSON.parse(line);
+    const url = new URL(value.url);
+    if (value.schema !== 'pinwhy.viewer.v1' || value.cwd !== boardRoot || value.readOnly !== true
+      || url.protocol !== 'http:' || url.hostname !== '127.0.0.1' || !url.port
+      || url.pathname !== basePath || url.search || url.hash || url.username || url.password) {
+      throw new Error('unexpected viewer identity');
+    }
+    return value.url;
+  } catch (cause) {
+    throw new PinwhyError('INVALID_JSON', 'The CLI did not return a valid read-only viewer address.', { cause });
+  }
 }
 
 /** One owned, read-only CLI process. A ready response never changes project configuration. */
 function startViewer(config, runtime, scope, basePath) {
-  const { PINWHY_CWD: _cwd, PINWHY_AGENT: _agent, PINWHY_PORT: _port, ...env } = process.env;
-  if (process.versions.electron) env.ELECTRON_RUN_AS_NODE = '1';
   const child = spawn(config.nodeExecutable, [runtime.real, 'serve', `--cwd=${scope.boardRoot}`,
     '--read-only', '--ephemeral', '--json', '--port=0', `--base-path=${basePath}`], {
-    cwd: scope.boardRoot, env, shell: false, stdio: ['pipe', 'pipe', 'pipe'],
+    cwd: scope.boardRoot, env: cliEnv(), shell: false, stdio: ['pipe', 'pipe', 'pipe'],
   });
   child.stdout.setEncoding('utf8');
   child.stderr.setEncoding('utf8');
@@ -53,15 +74,16 @@ function startViewer(config, runtime, scope, basePath) {
     escalation.unref();
     return closed;
   };
-  const fail = error => {
-    if (!settled) { settled = true; clearTimeout(deadline); rejectReady(error); }
-    void stop();
+  const settle = (fn, value) => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(deadline);
+    fn(value);
   };
+  const fail = error => { settle(rejectReady, error); void stop(); };
   const deadline = setTimeout(() => fail(new PinwhyError('TIMEOUT', 'The read-only viewer did not become ready.')), config.timeoutMs);
   child.once('error', cause => fail(new PinwhyError('SPAWN_FAILED', 'The viewer process could not start.', { cause })));
-  child.once('close', (code, signal) => {
-    if (!settled) { settled = true; clearTimeout(deadline); rejectReady(new PinwhyError('CLI_FAILED', `Viewer exited ${code ?? signal}: ${stderr.trim()}`)); }
-  });
+  child.once('close', (code, signal) => settle(rejectReady, new PinwhyError('CLI_FAILED', `Viewer exited ${code ?? signal}: ${stderr.trim()}`)));
   const collect = chunk => {
     bytes += Buffer.byteLength(chunk);
     if (bytes > config.maxOutputBytes) { fail(new PinwhyError('OUTPUT_LIMIT', 'The viewer startup output exceeded its limit.')); return false; }
@@ -73,16 +95,8 @@ function startViewer(config, runtime, scope, basePath) {
     stdout += chunk;
     const newline = stdout.indexOf('\n');
     if (newline < 0) return;
-    try {
-      const value = JSON.parse(stdout.slice(0, newline));
-      const url = new URL(value.url);
-      if (value.schema !== 'pinwhy.viewer.v1' || value.cwd !== scope.boardRoot || value.readOnly !== true
-        || url.protocol !== 'http:' || url.hostname !== '127.0.0.1' || !url.port
-        || url.pathname !== basePath || url.search || url.hash || url.username || url.password) {
-        throw new Error('unexpected viewer identity');
-      }
-      settled = true; clearTimeout(deadline); resolveReady(value.url);
-    } catch (cause) { fail(new PinwhyError('INVALID_JSON', 'The CLI did not return a valid read-only viewer address.', { cause })); }
+    try { settle(resolveReady, parseViewerReadyLine(stdout.slice(0, newline), scope.boardRoot, basePath)); }
+    catch (error) { fail(error); }
   });
   return { ready, stop, get alive() { return alive; } };
 }
@@ -93,11 +107,16 @@ export class ViewerSessions {
   #disposed = false;
   constructor(config, bridge, session) { this.config = config; this.bridge = bridge; this.session = session; }
 
-  async #binding(sessionId, signal) {
+  #assertActive(sessionId, signal, missingMessage = 'Open a live project Session before opening its board.') {
     if (this.#disposed) throw new PinwhyError('DISPOSED', 'The viewer adapter has unloaded.');
     signal?.throwIfAborted();
     const session = this.session(sessionId);
-    if (!session) throw new PinwhyError('SESSION_REQUIRED', 'Open a live project Session before opening its board.');
+    if (!session) throw new PinwhyError('SESSION_REQUIRED', missingMessage);
+    return session;
+  }
+
+  async #binding(sessionId, signal) {
+    const session = this.#assertActive(sessionId, signal);
     const config = this.config();
     const scope = await selectScope(config, { agent: { session }, signal });
     return { config, scope };
@@ -110,8 +129,7 @@ export class ViewerSessions {
       || runtime.capabilities.outputs?.serve?.schema !== 'pinwhy.viewer.v1') {
       throw new PinwhyError('RUNTIME_INCOMPATIBLE', 'Upgrade Pinwhy to a runtime providing the ephemeral read-only Web viewer.');
     }
-    signal?.throwIfAborted();
-    if (this.#disposed) throw new PinwhyError('DISPOSED', 'The viewer adapter has unloaded.');
+    this.#assertActive(sessionId, signal);
     const key = JSON.stringify([scope.boardRoot, config.nodeExecutable, runtime.real, config.timeoutMs, config.maxOutputBytes]);
     let entry = this.#entries.get(sessionId);
     if (entry && (entry.key !== key || !entry.process.alive)) {
@@ -120,8 +138,7 @@ export class ViewerSessions {
       entry = undefined;
     }
     // Recheck after stopping an obsolete process: another opener may have won the slot.
-    if (this.#disposed) throw new PinwhyError('DISPOSED', 'The viewer adapter has unloaded.');
-    if (!this.session(sessionId)) throw new PinwhyError('SESSION_REQUIRED', 'The Session closed while opening its board.');
+    this.#assertActive(sessionId, signal, 'The Session closed while opening its board.');
     entry ??= this.#entries.get(sessionId);
     if (!entry) {
       const viewerId = randomUUID(), basePath = `${PREFIX}${viewerId}/`;
@@ -233,9 +250,8 @@ export function mountViewer(ctx, config, bridge) {
   ctx.effect(() => ctx.on('session/disposed', session => { void viewers.closeSession(session.id); }));
   // Exact Fetch routes use the Host's owner admission on Web and native carriers.
   registerRpc(ctx, '/api/pinwhy/viewer.open', 'pinwhy/viewer.open', 'VIEWER_FAILED', async (payload, request) => {
-    if (!payload || typeof payload.sessionId !== 'string' || !payload.sessionId.trim()
-      || Object.keys(payload).some(key => key !== 'sessionId')) throw new PinwhyError('INVALID_ARGUMENT', 'Expected a Session identity.');
-    const value = await viewers.open(payload.sessionId, request.signal);
+    const { sessionId } = sessionPayload(payload);
+    const value = await viewers.open(sessionId, request.signal);
     const url = new URL(value.url);
     url.searchParams.set('agent', value.agentId);
     url.searchParams.set('view', 'logic');
