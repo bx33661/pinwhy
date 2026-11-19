@@ -1,16 +1,19 @@
 import { Check, ChevronRight, Link2, Network } from 'lucide-react';
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, type CSSProperties } from 'react';
 import { Button } from '@/components/ui/button';
+import { RelationBadge } from '@/components/relation-badge';
+import { useCopyFeedback } from '@/components/use-copy-feedback';
 import { cn } from '@/lib/utils';
 import { TypeDot } from '../../../SecurityNode';
 import { SeverityBadge } from '../../../SeverityBadge';
-import { relationGroup, relationLabel } from '../../../graph';
-import { confidenceLabel, presentNode, statusLabel, typeLabel } from '../../../presentation';
+import { relationTone } from '../../../graph';
+import { confidenceLabel, nodeAccent, presentNode, statusLabel, typeLabel } from '../../../presentation';
 import { t } from '../../../i18n';
 import { sourceLocation } from '../../../research-state';
 import type { BoardEdge, BoardNode } from '../../../types';
 import {
   AUDIT_BATCH,
+  edgePeer,
   isAuditCandidate,
   isAuditIssue,
   type ArgumentRole,
@@ -33,7 +36,7 @@ type Props = {
 
 function LocationChip({ node }: { node: BoardNode }) {
   const location = sourceLocation(node);
-  const [copied, setCopied] = useState(false);
+  const { copied, copy } = useCopyFeedback(2000, node.id);
   if (!location) return null;
   return (
     <div className="mt-1.5 flex items-start gap-1.5 rounded border bg-secondary/30 px-2 py-1.5">
@@ -44,12 +47,7 @@ function LocationChip({ node }: { node: BoardNode }) {
         variant="ghost"
         className="h-6 shrink-0 px-1.5"
         aria-label={copied ? t('common.copied') : t('source.copy')}
-        onClick={async () => {
-          try {
-            await navigator.clipboard.writeText(location);
-            setCopied(true);
-          } catch { /* clipboard may be blocked */ }
-        }}
+        onClick={() => { void copy(location); }}
       >
         {copied ? <Check className="size-3" /> : <Link2 className="size-3" />}
       </Button>
@@ -57,8 +55,8 @@ function LocationChip({ node }: { node: BoardNode }) {
   );
 }
 
-const KNOWN_TYPES = new Set(['start', 'goal', 'intent', 'hypothesis', 'question', 'fact', 'observation', 'action', 'result', 'finding', 'vuln', 'hint', 'summary', 'note']);
-const nodeAccent = (type: string) => `var(--node-${KNOWN_TYPES.has(type) ? type : 'note'})`;
+const DOSSIER_ROLES: readonly ArgumentRole[] = ['support', 'contradiction', 'condition', 'related'];
+const LOCAL_ROLES: readonly ArgumentRole[] = ['contradiction', 'condition', 'support', 'related'];
 const ROLE_TONE: Record<ArgumentRole | 'premise', string> = {
   support: 'var(--rel-support)',
   premise: 'var(--rel-support)',
@@ -102,7 +100,6 @@ export function AuditDossier({
   audit, selected, graphOpen, onToggleGraph, onSelect, onIssue, onCandidate, onOpenArgument, onExpand,
 }: Props) {
   const byId = audit.index.byId;
-  const peer = (edge: BoardEdge, id: string) => (edge.from === id ? edge.to : edge.from);
   const local = selected && audit.root && selected.id !== audit.root.id ? audit.contexts.get(selected.id) : null;
 
   // Open authored local rebuttals/conditions when a reader inspects an evidence record.
@@ -142,11 +139,10 @@ export function AuditDossier({
   };
 
   const relationCard = (edge: BoardEdge, ownerId: string) => {
-    const otherId = peer(edge, ownerId);
+    const otherId = edgePeer(edge, ownerId);
     const other = byId.get(otherId);
     const selectedHere = selected?.id === otherId || selected?.id === edge.from || selected?.id === edge.to;
-    const group = relationGroup(edge.kind);
-    const relTone = group !== 'link' ? `var(--rel-${group})` : null;
+    const relTone = relationTone(edge.kind);
     return (
       <article
         key={edge.id}
@@ -158,16 +154,7 @@ export function AuditDossier({
       >
         <i aria-hidden="true" className="absolute bottom-2.5 left-0 top-2.5 w-[2.5px] rounded-r-full bg-(--r)" />
         <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-          <span
-            className={cn('inline-flex items-center rounded border px-1.5 py-0 font-medium leading-4', !relTone && 'bg-secondary/60 text-subtle')}
-            style={relTone ? {
-              color: `color-mix(in srgb, ${relTone} 85%, var(--ink))`,
-              borderColor: `color-mix(in srgb, ${relTone} 32%, var(--line))`,
-              background: `color-mix(in srgb, ${relTone} 10%, var(--surface))`,
-            } : undefined}
-          >
-            {relationLabel(edge.kind)}
-          </span>
+          <RelationBadge kind={edge.kind} />
           <span className="font-mono text-[10.5px] text-muted-foreground">{edge.kind}</span>
           <span className="ml-auto font-mono text-[10.5px] text-muted-foreground">{edge.id}</span>
         </div>
@@ -317,16 +304,11 @@ export function AuditDossier({
           <h2 className="m-0 text-sm font-semibold">{t('audit.dossier')}</h2>
           <p className="m-0 mt-1 text-[11px] leading-5 text-muted-foreground">{t('audit.dossierHint')}</p>
           <div className="m-0 mt-2 flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
-            {([
-              ['support', t('audit.support'), audit.pages.support.total],
-              ['contradiction', t('audit.contradiction'), audit.pages.contradiction.total],
-              ['condition', t('audit.condition'), audit.pages.condition.total],
-              ['related', t('audit.related'), audit.pages.related.total],
-            ] as const).map(([role, label, total]) => (
+            {DOSSIER_ROLES.map((role) => (
               <span key={role} className="inline-flex items-center gap-1.5 rounded-md border bg-secondary/40 px-2 py-0.5 tabular-nums">
                 <i aria-hidden="true" className="size-1.5 rounded-full" style={{ background: ROLE_TONE[role] }} />
-                <span>{label}</span>
-                <strong className="font-medium text-foreground">{total}</strong>
+                <span>{t(`audit.${role}`)}</span>
+                <strong className="font-medium text-foreground">{audit.pages[role].total}</strong>
               </span>
             ))}
           </div>
@@ -342,7 +324,7 @@ export function AuditDossier({
         <ClaimCard node={root} selected={selected?.id === root.id} onSelect={onSelect} />
         <p className="m-0 mt-2 text-[11px] leading-5 text-muted-foreground">{t('audit.boundaryHint')}</p>
 
-        {(['support', 'contradiction', 'condition', 'related'] as ArgumentRole[]).map((role) =>
+        {DOSSIER_ROLES.map((role) =>
           groupSection(audit.pages[role], t(`audit.${role}`), root.id, role, role === 'related' ? 0 : AUDIT_BATCH))}
         {groupSection(audit.premises, t('audit.premise'), root.id, 'premise')}
 
@@ -353,7 +335,7 @@ export function AuditDossier({
             <div className="mt-2">
               <ClaimCard node={local.node} selected={selected?.id === local.node.id} onSelect={onSelect} />
             </div>
-            {(['contradiction', 'condition', 'support', 'related'] as ArgumentRole[])
+            {LOCAL_ROLES
               .filter((role) => local.groups[role].length > 0)
               .map((role) => {
                 const label = `${local.node.title || local.node.id} · ${t(role === 'contradiction' ? 'audit.hasContradictions' : role === 'condition' ? 'audit.hasConditions' : `audit.${role}`)}`;

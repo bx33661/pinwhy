@@ -1,6 +1,5 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { Background, BackgroundVariant, MiniMap, ReactFlow, ReactFlowProvider } from '@xyflow/react';
-import { History } from 'lucide-react';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import type { CardTheme } from './card-themes';
@@ -8,8 +7,8 @@ import { BoardGroup } from './BoardGroup';
 import { BrandMark } from './BrandMark';
 import { SecurityNode } from './SecurityNode';
 import { RoutedEdge } from './RoutedEdge';
-import { formatTime, project, typeLabel as typeLabelOf, type CanvasNode } from './graph';
-import { EMPTY_FILTER, type NodeFilter } from './presentation';
+import { project, typeLabel as typeLabelOf, type CanvasNode } from './graph';
+import { EMPTY_FILTER, miniMapNodeColor, type NodeFilter } from './presentation';
 import { useGraphStream } from './use-graph-stream';
 import { CanvasPeekCard } from './panels/CanvasPeekCard';
 import { CanvasToolbar } from './panels/CanvasToolbar';
@@ -23,7 +22,7 @@ import { NewNodeDialog } from './panels/EditPanel';
 import { Sidebar } from './panels/Sidebar';
 import { Topbar } from './panels/Topbar';
 import { TimelineBar } from './panels/TimelineBar';
-import { locale, t } from './i18n';
+import { t } from './i18n';
 import { SessionDrafts, WriteRecovery } from './session-drafts';
 import { useWorkspaceData } from './workspace/use-workspace-data';
 import { useWorkspaceLocation } from './workspace/use-workspace-location';
@@ -36,15 +35,15 @@ import { useWorkspaceScene } from './workspace/use-workspace-scene';
 import { useWorkspaceTimeline } from './workspace/use-workspace-timeline';
 import { useWorkspaceChrome, useWorkspaceShortcuts } from './workspace/use-workspace-chrome';
 import { useEmbedHost } from './workspace/use-embed-host';
+import { WorkspaceBanners } from './workspace/WorkspaceBanners';
 import { AuditCatalog, AuditDossier } from './workspace/shells/audit';
+import { AuditSplitDivider, clampAuditSplit } from './workspace/shells/audit/AuditSplitDivider';
 import { isAuditIssue } from './workspace/audit';
 import type { BoardNode } from './types';
 import type { Scene3DProps } from './scene3d/shared';
 import { readPresentation } from './embedded';
 import { usePref } from './use-pref';
 import { runViewTransition } from './view-transition';
-
-const KNOWN_NODE_TYPES = new Set(['start', 'goal', 'intent', 'hypothesis', 'question', 'fact', 'observation', 'action', 'result', 'finding', 'vuln', 'hint', 'summary', 'note']);
 
 const nodeTypes = { security: SecurityNode, boardGroup: BoardGroup };
 const edgeTypes = { routed: RoutedEdge };
@@ -76,7 +75,6 @@ function Workspace() {
   const [canvasZoom, setCanvasZoom] = useState(1);
   const [auditGraphOpen, setAuditGraphOpen] = usePref('audit-graph', false);
   const [auditSplit, setAuditSplit] = usePref('audit-split', 54);
-  const clampSplit = (value: number) => Math.max(28, Math.min(76, Math.round(value)));
   const digestTrigger = useRef<HTMLButtonElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const flatRef = useRef<HTMLDivElement>(null);
@@ -169,9 +167,10 @@ function Workspace() {
     pendingFocus.current = id;
   };
   const chooseCandidate = (id: string | null) => {
-    navigateWorkspace({ candidateId: id, node: id ?? issueId });
-    if (id ?? issueId) focusNode((id ?? issueId)!); else clearSelection();
-    pendingFocus.current = id ?? issueId;
+    const target = id ?? issueId;
+    navigateWorkspace({ candidateId: id, node: target });
+    if (target) focusNode(target); else clearSelection();
+    pendingFocus.current = target;
   };
 
   // A single authored issue should open immediately so the dossier is not an empty shell.
@@ -265,7 +264,7 @@ function Workspace() {
           {audit && (
             <div
               className={cn('min-h-0', showAuditGraph ? 'shrink-0 border-b' : 'flex-1')}
-              style={showAuditGraph ? { height: `${clampSplit(auditSplit)}%` } : undefined}
+              style={showAuditGraph ? { height: `${clampAuditSplit(auditSplit)}%` } : undefined}
             >
               <AuditDossier
                 audit={audit}
@@ -280,45 +279,7 @@ function Workspace() {
               />
             </div>
           )}
-          {showAuditGraph && (
-            <div
-              role="separator"
-              aria-orientation="horizontal"
-              aria-label={t('audit.resizeSplit')}
-              aria-valuemin={28}
-              aria-valuemax={76}
-              aria-valuenow={clampSplit(auditSplit)}
-              tabIndex={0}
-              onKeyDown={(event) => {
-                if (event.key === 'ArrowUp') { event.preventDefault(); setAuditSplit((value) => clampSplit(value - 4)); }
-                if (event.key === 'ArrowDown') { event.preventDefault(); setAuditSplit((value) => clampSplit(value + 4)); }
-              }}
-              onPointerDown={(event) => {
-                const container = event.currentTarget.parentElement;
-                if (!container) return;
-                event.preventDefault();
-                event.currentTarget.setPointerCapture(event.pointerId);
-                const startY = event.clientY;
-                const startSplit = clampSplit(auditSplit);
-                const totalHeight = Math.max(160, container.getBoundingClientRect().height);
-                const onMove = (moveEvent: PointerEvent) => {
-                  const pct = startSplit + ((moveEvent.clientY - startY) / totalHeight) * 100;
-                  setAuditSplit(clampSplit(pct));
-                };
-                const onUp = () => {
-                  window.removeEventListener('pointermove', onMove);
-                  window.removeEventListener('pointerup', onUp);
-                  window.removeEventListener('pointercancel', onUp);
-                };
-                window.addEventListener('pointermove', onMove);
-                window.addEventListener('pointerup', onUp);
-                window.addEventListener('pointercancel', onUp);
-              }}
-              className="group relative z-10 flex h-1.5 shrink-0 cursor-row-resize items-center justify-center border-b bg-background/80 transition-colors hover:bg-accent"
-            >
-              <span className="h-0.5 w-10 rounded-full bg-border transition-colors group-hover:bg-strong" />
-            </div>
-          )}
+          {showAuditGraph && <AuditSplitDivider value={auditSplit} onChange={setAuditSplit} />}
           {(!auditMode || showAuditGraph) && (
           <div ref={flatRef} data-layout-transition={layoutTransition ? 'true' : undefined} className={cn('relative min-h-0', auditMode ? 'flex-1' : 'absolute inset-0')} inert={scene3d} aria-hidden={scene3d}>
           <ReactFlow
@@ -329,7 +290,7 @@ function Workspace() {
             onNodesChange={handleNodesChange}
             onNodeClick={(event, node) => {
               onNodeClick(event, node);
-              const detail = (event.target as Element).closest<HTMLButtonElement>('button[data-audit-detail]')?.dataset.auditDetail;
+              const detail = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('button[data-audit-detail]')?.dataset.auditDetail : undefined;
               if (audit && (detail === 'contradiction' || detail === 'condition')) {
                 const context = audit.contexts.get(node.id);
                 if (context && !context.pages[detail].open) expandAudit(context.pages[detail].key, 'more', 0);
@@ -386,26 +347,18 @@ function Workspace() {
               onScene3d={auditMode ? undefined : openScene}
             />
             {showMap && (
-              <MiniMap
+              <MiniMap<CanvasNode>
                 position="bottom-left"
                 style={{ marginBottom: 64 }}
                 pannable
                 zoomable
                 nodeBorderRadius={4}
                 nodeStrokeWidth={3}
-                nodeColor={(node) => {
-                  const d = node.data as CanvasNode['data'];
-                  if (d.group) return 'transparent';
-                  if (d.current) return 'var(--live)';
-                  if (['dead', 'refuted', 'superseded'].includes(d.item?.status || '')) return 'var(--line-strong)';
-                  if (d.item?.severity === 'critical' || d.item?.severity === 'high') return 'var(--danger)';
-                  return KNOWN_NODE_TYPES.has(d.item?.type) ? `var(--node-${d.item.type})` : 'var(--ink-3)';
-                }}
+                nodeColor={(node) => miniMapNodeColor(node.data)}
                 nodeStrokeColor={(node) => {
-                  const d = node.data as CanvasNode['data'];
-                  if (d.group) return 'var(--line-strong)';
+                  if (node.data.group) return 'var(--line-strong)';
                   if (node.id === selectedId) return 'var(--ink)';
-                  if (d.current) return 'var(--live)';
+                  if (node.data.current) return 'var(--live)';
                   return 'transparent';
                 }}
               />
@@ -451,38 +404,20 @@ function Workspace() {
             <EmptyBoard viewEmpty={allNodes.length > 0} isStatic={isStatic} onShowAll={() => switchMode('all')} />
           )}
 
-          <div className="pointer-events-none absolute left-1/2 top-3 z-10 flex -translate-x-1/2 flex-col items-center gap-2">
-            {offlineShown && (
-              <div role="alert" className="whitespace-nowrap rounded-full border border-destructive/40 bg-danger-soft px-3 py-1 text-xs text-destructive shadow-xs">
-                {t('app.disconnected')}{syncedAt ? t('app.frozenAt', { time: new Date(syncedAt).toLocaleTimeString(locale, { hour12: false }) }) : ''}
-              </div>
-            )}
-            {timeline.active && (
-              <div role="status" className="anim-pill-in pointer-events-auto flex items-center gap-2 whitespace-nowrap rounded-full border border-foreground bg-card/90 px-3 py-1 text-xs text-foreground shadow-float backdrop-blur-md">
-                <History className="size-3.5" />
-                {t('timeline.banner', { id: timeline.point?.id ?? asOf ?? '', time: formatTime(timeline.point?.at ?? undefined) })}
-                <button type="button" className="rounded px-1 font-medium underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => { timeline.pause(); setAsOf(null); }}>
-                  {t('timeline.backToNow')}
-                </button>
-              </div>
-            )}
-            {isStatic && pastPoint && (
-              <div role="status" className="flex items-center gap-2 whitespace-nowrap rounded-full border border-foreground bg-card/90 px-3 py-1 text-xs text-foreground shadow-xs backdrop-blur-md">
-                <History className="size-3.5" />
-                {t('timeline.staticBadge', { id: pastPoint.id, time: formatTime(pastPoint.at ?? undefined) })}
-              </div>
-            )}
-            {hidden > 0 && (
-              <button
-                className="anim-pill-in pointer-events-auto whitespace-nowrap rounded-full border bg-card/90 px-3 py-1 text-xs text-muted-foreground shadow-xs backdrop-blur-md transition-colors hover:border-strong hover:text-foreground"
-                onClick={() => switchMode('all')}
-              >
-                {t('app.hiddenNodes', { n: hidden })}
-              </button>
-            )}
-            {laying > 0 && <div role="status" className="anim-pill-in whitespace-nowrap rounded-full border bg-card/90 px-3 py-1 text-xs text-muted-foreground shadow-xs backdrop-blur-md">{t('app.laying', { n: laying })}</div>}
-            {notice && <div role="status" className="anim-pill-in whitespace-nowrap rounded-full border bg-card/90 px-3 py-1 text-xs shadow-float backdrop-blur-md">{notice}</div>}
-          </div>
+          <WorkspaceBanners
+            offlineShown={offlineShown}
+            syncedAt={syncedAt}
+            timelineActive={timeline.active}
+            timelinePoint={timeline.point}
+            asOf={asOf}
+            onBackToNow={() => { timeline.pause(); setAsOf(null); }}
+            isStatic={isStatic}
+            pastPoint={pastPoint}
+            hidden={hidden}
+            onShowAll={() => switchMode('all')}
+            laying={laying}
+            notice={notice}
+          />
 
           <p className="sr-only" role="status" aria-live="polite">{selected ? t('app.selected', { type: typeLabelOf(selected.type), title: selected.title }) : ''}</p>
 

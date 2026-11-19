@@ -1,5 +1,5 @@
 import type ELK from 'elkjs/lib/elk-api';
-import type { ElkExtendedEdge } from 'elkjs/lib/elk-api';
+import type { ElkNode } from 'elkjs/lib/elk-api';
 import type { Edge, Node } from '@xyflow/react';
 import type { EdgeRoute } from './edge-route';
 import type { BoardEdge, BoardNode, GraphSnapshot, ViewMode } from './types';
@@ -56,6 +56,31 @@ export type CanvasNodeData = Record<string, unknown> & {
 };
 
 export type CanvasNode = Node<CanvasNodeData, 'security' | 'boardGroup'>;
+
+export type CanvasEdgeData = Record<string, unknown> & {
+  kind: string;
+  group: RelationGroup;
+  reversed: boolean;
+  quiet: boolean;
+  text: string;
+  route?: EdgeRoute;
+  style?: EdgeStyle;
+  focused?: boolean;
+};
+
+export type CanvasEdge = Edge<CanvasEdgeData> & { data: CanvasEdgeData };
+
+/** Resolve canvas coordinates for a node, adding its display-group parent offset when grouped. */
+export function absolutePosition(
+  node: Pick<CanvasNode, 'parentId' | 'position'>,
+  byId: ReadonlyMap<string, Pick<CanvasNode, 'position'>> | ((id: string) => Pick<CanvasNode, 'position'> | undefined),
+): { x: number; y: number } {
+  const parent = node.parentId ? (typeof byId === 'function' ? byId(node.parentId) : byId.get(node.parentId)) : undefined;
+  return {
+    x: node.position.x + (parent?.position.x ?? 0),
+    y: node.position.y + (parent?.position.y ?? 0),
+  };
+}
 
 export const currentNodeId = (snapshot: GraphSnapshot, agentId = 'agent:primary'): string | null => {
   const id = snapshot.cursors?.[agentId]?.to || (agentId === 'agent:primary' ? snapshot.meta?.focus : null);
@@ -155,7 +180,7 @@ export function project(snapshot: GraphSnapshot, mode: ViewMode, query: string, 
 
   // A weak relation is only drawn without a selection when it is all that ties one of its cards to the board.
   const strong = new Set(edges.filter((edge) => !WEAK_RELATIONS.has(edge.kind)).flatMap((edge) => [edge.from, edge.to]));
-  const flowEdges: Edge[] = edges.map((edge) => {
+  const flowEdges: CanvasEdge[] = edges.map((edge) => {
     const important = ['proves', 'supports', 'contradicts', 'supersedes', 'resolves'].includes(edge.kind);
     const quiet = WEAK_RELATIONS.has(edge.kind) && strong.has(edge.from) && strong.has(edge.to);
     const group = relationGroup(edge.kind);
@@ -163,14 +188,15 @@ export function project(snapshot: GraphSnapshot, mode: ViewMode, query: string, 
     // always reads left to right; the arrowhead stays on the relation's own `to` end.
     const reversed = PREMISE_IS_TARGET.has(edge.kind);
     const marker = { type: 'arrowclosed' as const, width: 12, height: 12, color: `var(--edge-${group})` };
+    const text = edge.label ? `${relationLabel(edge.kind)} · ${edge.label}` : relationLabel(edge.kind);
     return {
       id: edge.id,
       source: reversed ? edge.to : edge.from,
       target: reversed ? edge.from : edge.to,
       type: 'default',
-      label: edge.label ? `${relationLabel(edge.kind)} · ${edge.label}` : relationLabel(edge.kind),
+      label: text,
       className: `edge edge-${edge.kind} edge-g-${group}`,
-      data: { kind: edge.kind, group, reversed, quiet, text: edge.label ? `${relationLabel(edge.kind)} · ${edge.label}` : relationLabel(edge.kind) },
+      data: { kind: edge.kind, group, reversed, quiet, text },
       animated: false,
       ...(reversed ? { markerStart: marker } : { markerEnd: marker }),
       style: { strokeWidth: important ? 1.75 : 1.5, strokeDasharray: RELATION_DASH[group] },
@@ -186,7 +212,7 @@ export type Positions = ReadonlyMap<string, { x: number; y: number }>;
  * `previous` is where the same view last placed each node. It keeps a growing board steady: cards
  * that already existed keep their order within each column instead of being reshuffled.
  */
-export async function layoutGraph(nodes: CanvasNode[], edges: Edge[], direction: 'RIGHT' | 'DOWN' = 'RIGHT', grouped = false, overviewColumns: 1 | 2 = 2, previous?: Positions) {
+export async function layoutGraph(nodes: CanvasNode[], edges: CanvasEdge[], direction: 'RIGHT' | 'DOWN' = 'RIGHT', grouped = false, overviewColumns: 1 | 2 = 2, previous?: Positions) {
   if (!nodes.length) return { nodes, edges };
   if (grouped) return layoutOverview(nodes, edges, overviewColumns);
   try {
@@ -198,7 +224,7 @@ export async function layoutGraph(nodes: CanvasNode[], edges: Edge[], direction:
 }
 
 /** Plain left-to-right grid; used only when ELK cannot lay the graph out. */
-export function gridLayout(nodes: CanvasNode[], edges: Edge[], direction: 'RIGHT' | 'DOWN' = 'RIGHT') {
+export function gridLayout(nodes: CanvasNode[], edges: CanvasEdge[], direction: 'RIGHT' | 'DOWN' = 'RIGHT') {
   const columns = Math.max(1, Math.ceil(Math.sqrt(nodes.length)));
   const rowHeight = NODE_H + 40;
   return {
@@ -243,7 +269,7 @@ export function placementFor(count: number) {
   return { 'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF', 'elk.layered.thoroughness': '7' };
 }
 
-async function elkLayout(nodes: CanvasNode[], edges: Edge[], direction: 'RIGHT' | 'DOWN', previous?: Positions) {
+async function elkLayout(nodes: CanvasNode[], edges: CanvasEdge[], direction: 'RIGHT' | 'DOWN', previous?: Positions) {
   const across = direction === 'RIGHT';
   const hasIncoming = new Set(edges.map((edge) => edge.target));
   const inSide = across ? 'WEST' : 'NORTH';
@@ -253,8 +279,9 @@ async function elkLayout(nodes: CanvasNode[], edges: Edge[], direction: 'RIGHT' 
   // on top of each other; separate ports keep every relation traceable on its own line.
   const ports = new Map<string, { id: string; layoutOptions: Record<string, string> }[]>();
   const addPort = (node: string, id: string, side: string) => {
-    if (!ports.has(node)) ports.set(node, []);
-    ports.get(node)!.push({ id, layoutOptions: { 'elk.port.side': side } });
+    const list = ports.get(node) ?? [];
+    list.push({ id, layoutOptions: { 'elk.port.side': side } });
+    ports.set(node, list);
   };
   for (const edge of edges) {
     addPort(edge.source, `${edge.id}::out`, outSide);
@@ -263,7 +290,7 @@ async function elkLayout(nodes: CanvasNode[], edges: Edge[], direction: 'RIGHT' 
   // Creation order makes the first layout of a board deterministic.
   const ordered = [...nodes].sort((a, b) => Number(a.data.item.ts || 0) - Number(b.data.item.ts || 0));
   if (!elk) throw new Error('no layout engine configured');
-  const result = await elk.layout({
+  const result = await elk.layout<ElkNode>({
     id: 'root',
     layoutOptions: {
       'elk.algorithm': 'layered',
@@ -299,12 +326,12 @@ async function elkLayout(nodes: CanvasNode[], edges: Edge[], direction: 'RIGHT' 
     }),
     edges: edges.map((edge) => ({
       id: edge.id, sources: [`${edge.id}::out`], targets: [`${edge.id}::in`],
-      layoutOptions: edgePriority(String((edge.data as { kind?: string } | undefined)?.kind || 'related-to')),
+      layoutOptions: edgePriority(edge.data.kind || 'related-to'),
     })),
   });
   const run = ++layoutRuns;
   const positions = new Map((result.children || []).map((node) => [node.id, node]));
-  const sections = new Map(((result.edges || []) as ElkExtendedEdge[]).map((edge) => [edge.id, edge.sections?.[0]]));
+  const sections = new Map((result.edges || []).map((edge) => [edge.id, edge.sections?.[0]]));
   const at = (id: string) => ({ x: positions.get(id)?.x || 0, y: positions.get(id)?.y || 0 });
   return {
     nodes: nodes.map((node) => {
@@ -346,6 +373,10 @@ const GROUP_OF: Record<string, RelationGroup> = {
   supersedes: 'replace', duplicates: 'replace',
 };
 export const relationGroup = (kind: string): RelationGroup => GROUP_OF[kind] || 'link';
+export const relationTone = (kind: string): string | null => {
+  const group = relationGroup(kind);
+  return group !== 'link' ? `var(--rel-${group})` : null;
+};
 
 /** Colour alone is not enough to tell the families apart, so each also has its own stroke pattern. */
 export const RELATION_DASH: Record<RelationGroup, string | undefined> = {
@@ -372,7 +403,7 @@ export function formatTime(value?: number) {
 }
 
 /** A display-only catalogue. Group frames never enter the persisted graph. */
-export function layoutOverview(nodes: CanvasNode[], edges: Edge[], overviewColumns: 1 | 2 = 2) {
+export function layoutOverview(nodes: CanvasNode[], edges: CanvasEdge[], overviewColumns: 1 | 2 = 2) {
   const connected = new Set(edges.flatMap((edge) => [edge.source, edge.target]));
   const groups = BOARD_GROUPS.map((group) => ({ ...group, nodes: nodes.filter((node) => groupFor(node.data.item, connected) === group.id) })).filter((group) => group.nodes.length);
   const W = 240, H = 112, colGap = 22, rowGap = 30, pad = 28, top = 90;

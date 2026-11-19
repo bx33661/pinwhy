@@ -1,11 +1,14 @@
-import { useEffect, useState, type CSSProperties, type ReactNode, type Ref } from 'react';
+import type { CSSProperties, ReactNode, Ref } from 'react';
 import { Collapsible } from 'radix-ui';
 import { Check, ArrowDownLeft, ArrowUpRight, ChevronRight, Copy, Link2, Loader2, MessageSquareQuote, ScanSearch, Unlink, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { IconButton } from '@/components/icon-button';
+import { startPointerDrag } from '@/components/pointer-drag';
+import { RelationBadge } from '@/components/relation-badge';
+import { useCopyFeedback } from '@/components/use-copy-feedback';
 import { Kbd } from '@/components/ui/kbd';
 import { NodeTypeIcon, TypeDot } from '../SecurityNode';
-import { formatTime, relationGroup, relationLabel, typeLabel } from '../graph';
+import { formatTime, typeLabel } from '../graph';
 import { confidenceLabel, presentNode, severityLabel, statusLabel } from '../presentation';
 import { SeverityBadge } from '../SeverityBadge';
 import { useEdgeRemoval } from './use-node-forms';
@@ -14,6 +17,7 @@ import type { BoardEdge, BoardNode } from '../types';
 import { t } from '../i18n';
 import { sourceLocation } from '../research-state';
 import { usePref } from '../use-pref';
+import { edgePeer } from '../workspace/audit';
 import { NodeHistorySection, type HistoryAvailability } from './HistoryPanel';
 
 /** The framed host's explicit reference affordance; absent on standalone, historical and static pages. */
@@ -58,9 +62,7 @@ function renderInlineCode(text: string): ReactNode {
 
 export function Inspector({ node, edges, byId, onClose, onFocus, onFocusNeighborhood, onCopyLink, linkCopied, reference, writable, onReload, isStatic, connected, revision, panelRef }: Props) {
   const [width, setWidth] = usePref('inspector-width', 380);
-  const [idCopied, setIdCopied] = useState(false);
-  useEffect(() => { setIdCopied(false); }, [node.id]);
-  useEffect(() => { if (!idCopied) return; const timer = setTimeout(() => setIdCopied(false), 1800); return () => clearTimeout(timer); }, [idCopied]);
+  const { copied: idCopied, copy: copyId } = useCopyFeedback(1800, node.id);
   const panelWidth = clampWidth(Number.isFinite(width) ? width : 380);
   const relations = edges.filter((edge) => edge.from === node.id || edge.to === node.id);
   const incoming = relations.filter((edge) => edge.to === node.id);
@@ -73,10 +75,9 @@ export function Inspector({ node, edges, byId, onClose, onFocus, onFocusNeighbor
 
   const renderRelation = (edge: BoardEdge) => {
     const isIncoming = edge.to === node.id;
-    const peer = byId.get(isIncoming ? edge.from : edge.to);
+    const peerId = edgePeer(edge, node.id);
+    const peer = byId.get(peerId);
     const Arrow = isIncoming ? ArrowDownLeft : ArrowUpRight;
-    const group = relationGroup(edge.kind);
-    const relTone = group !== 'link' ? `var(--rel-${group})` : null;
     return (
       <li key={edge.id} className="group/row relative">
         <button
@@ -86,19 +87,10 @@ export function Inspector({ node, edges, byId, onClose, onFocus, onFocusNeighbor
           <Arrow className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-label={isIncoming ? t('inspector.from') : t('inspector.to')} />
           <span className="min-w-0 flex-1">
             <span className="flex flex-wrap items-center gap-1.5 text-[11px] leading-4 text-muted-foreground">
-              <span
-                className={cn('inline-flex items-center rounded border px-1.5 py-0 text-[10.5px] font-medium leading-4', !relTone && 'bg-secondary/60 text-subtle')}
-                style={relTone ? {
-                  color: `color-mix(in srgb, ${relTone} 85%, var(--ink))`,
-                  borderColor: `color-mix(in srgb, ${relTone} 30%, var(--line))`,
-                  background: `color-mix(in srgb, ${relTone} 10%, var(--surface))`,
-                } : undefined}
-              >
-                {relationLabel(edge.kind)}
-              </span>
+              <RelationBadge kind={edge.kind} className="text-[10.5px]" />
               {peer && <><TypeDot type={peer.type} className="size-1.5" /><span>{typeLabel(peer.type)}</span></>}
             </span>
-            <span className="mt-0.5 line-clamp-2 text-[13px] leading-5">{peer ? presentNode(peer).headline : isIncoming ? edge.from : edge.to}</span>
+            <span className="mt-0.5 line-clamp-2 text-[13px] leading-5">{peer ? presentNode(peer).headline : peerId}</span>
           </span>
           <ChevronRight className="mt-0.5 size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
         </button>
@@ -125,21 +117,8 @@ export function Inspector({ node, edges, byId, onClose, onFocus, onFocusNeighbor
         aria-orientation="vertical"
         aria-label={t('inspector.resize')}
         onPointerDown={(event) => {
-          if (event.button !== 0) return;
-          event.preventDefault();
-          const startX = event.clientX;
           const startWidth = panelWidth;
-          const target = event.currentTarget;
-          target.setPointerCapture(event.pointerId);
-          const onMove = (moveEvent: PointerEvent) => setWidth(clampWidth(startWidth + (startX - moveEvent.clientX)));
-          const onUp = () => {
-            target.removeEventListener('pointermove', onMove);
-            target.removeEventListener('pointerup', onUp);
-            target.removeEventListener('pointercancel', onUp);
-          };
-          target.addEventListener('pointermove', onMove);
-          target.addEventListener('pointerup', onUp);
-          target.addEventListener('pointercancel', onUp);
+          startPointerDrag(event, ({ dx }) => setWidth(clampWidth(startWidth - dx)));
         }}
         className="absolute inset-y-3 -left-1.5 hidden w-3 cursor-col-resize items-center justify-center sm:flex"
       >
@@ -151,12 +130,7 @@ export function Inspector({ node, edges, byId, onClose, onFocus, onFocusNeighbor
         <div className="min-w-0 flex-1">
           <button
             type="button"
-            onClick={async () => {
-              try {
-                await navigator.clipboard.writeText(node.id);
-                setIdCopied(true);
-              } catch { /* clipboard can be denied in sandboxed contexts */ }
-            }}
+            onClick={() => { void copyId(node.id); }}
             aria-label={idCopied ? `${node.id} · ${t('common.copied')}` : `${t('inspector.copyId')} · ${node.id}`}
             title={idCopied ? t('common.copied') : `${t('inspector.copyId')}: ${node.id}`}
             className="group inline-flex max-w-full items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
@@ -299,32 +273,21 @@ function InputIntegrityNotice({ record }: { record: Pick<BoardNode, 'inputTrunca
 function SourceSection({ node }: { node: BoardNode }) {
   const location = sourceLocation(node);
   const tags = Array.isArray(node.tags) ? node.tags.filter((tag): tag is string => typeof tag === 'string') : [];
-  const [copied, setCopied] = useState(false);
-  const [error, setError] = useState('');
-  useEffect(() => { if (!copied) return; const timer = setTimeout(() => setCopied(false), 2000); return () => clearTimeout(timer); }, [copied]);
+  const { copied, error, copy } = useCopyFeedback(2000, node.id);
   if (!location && !tags.length && !node.session && !node.updatedBy) return null;
-  const copyLocation = async () => {
-    try {
-      await navigator.clipboard.writeText(location);
-      setCopied(true);
-      setError('');
-    } catch {
-      setError(t('app.clipboardFailed'));
-    }
-  };
   return <section className="mt-5 flex flex-col gap-2" aria-label={t('source.heading')}>
     <h3 className="m-0 text-xs font-medium text-muted-foreground">{t('source.heading')}</h3>
     {location && <div className="flex items-start gap-2 rounded-md border bg-secondary/30 p-2">
       <code
         className="min-w-0 flex-1 cursor-pointer whitespace-pre-wrap break-all text-[11px] transition-colors hover:text-foreground"
         aria-label={t('source.location')}
-        onClick={() => { if (!window.getSelection()?.toString()) void copyLocation(); }}
+        onClick={() => { if (!window.getSelection()?.toString()) void copy(location); }}
       >{location}</code>
       <button
         type="button"
         aria-label={copied ? t('common.copied') : t('source.copy')}
         title={copied ? t('common.copied') : t('source.copy')}
-        onClick={() => { void copyLocation(); }}
+        onClick={() => { void copy(location); }}
         className="inline-flex h-6 shrink-0 items-center gap-1 rounded px-1.5 text-subtle transition-colors hover:bg-accent hover:text-foreground"
       >
         {copied

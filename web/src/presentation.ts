@@ -3,6 +3,23 @@ import { t, tOptional } from './i18n';
 import { sourceLocation } from './research-state';
 
 /** Stored values outside the known vocabulary are shown as they are. */
+export const KNOWN_NODE_TYPES: ReadonlySet<string> = new Set([
+  'start', 'goal', 'intent', 'hypothesis', 'question', 'fact', 'observation',
+  'action', 'result', 'finding', 'vuln', 'hint', 'summary', 'note',
+]);
+const RETIRED_STATUSES = new Set(['dead', 'refuted', 'superseded']);
+
+export const nodeAccent = (type: string) => `var(--node-${KNOWN_NODE_TYPES.has(type) ? type : 'note'})`;
+
+export function miniMapNodeColor(data: { group?: boolean; current?: boolean; item?: Pick<BoardNode, 'type' | 'status' | 'severity'> }): string {
+  if (data.group) return 'transparent';
+  if (data.current) return 'var(--live)';
+  if (RETIRED_STATUSES.has(data.item?.status || '')) return 'var(--line-strong)';
+  if (data.item?.severity === 'critical' || data.item?.severity === 'high') return 'var(--danger)';
+  const type = data.item?.type;
+  return type && KNOWN_NODE_TYPES.has(type) ? `var(--node-${type})` : 'var(--ink-3)';
+}
+
 export const typeLabel = (type: string) => tOptional(`type.${type}`) || type;
 export const statusLabel = (status?: string | null) => status ? tOptional(`status.${status}`) || status : t('status.unset');
 export const severityLabel = (severity?: string | null) => severity ? tOptional(`severity.${severity}`) || severity : t('severity.unset');

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, type RefObject } from 'react';
 import type { Edge, NodeMouseHandler, OnNodesChange } from '@xyflow/react';
 import { neighborInDirection, type ArrowKey } from '../canvas-state';
-import { NODE_H, NODE_W, type CanvasNode } from '../graph';
+import { absolutePosition, NODE_H, NODE_W, type CanvasNode } from '../graph';
 import type { BoardNode, GraphSnapshot, ViewMode } from '../types';
 import type { WorkspaceProjection } from './use-workspace-layout';
 
@@ -23,6 +23,10 @@ type Options = {
   scene3d: boolean;
   revealInGeneral?: boolean;
 };
+
+function asArrowKey(key: string): ArrowKey | null {
+  return key === 'ArrowLeft' || key === 'ArrowRight' || key === 'ArrowUp' || key === 'ArrowDown' ? key : null;
+}
 
 /** A single selection drives the inspector, URL and both canvases, including hidden-node reveal. */
 export function useWorkspaceSelection({ snapshot, byId, projection, nodes, edges, mode, setMode, selectedId, setSelectedId, deepLink, pendingFocus, centerOnNode, onNodesChange, closeSidebar, scene3d, revealInGeneral = true }: Options) {
@@ -97,14 +101,15 @@ export function useWorkspaceSelection({ snapshot, byId, projection, nodes, edges
 
   useEffect(() => {
     const onArrow = (event: KeyboardEvent) => {
-      if (!selectedId || event.metaKey || event.ctrlKey || event.altKey || !event.key.startsWith('Arrow')) return;
-      const target = event.target as HTMLElement | null;
+      const arrowKey = asArrowKey(event.key);
+      if (!selectedId || event.metaKey || event.ctrlKey || event.altKey || !arrowKey) return;
+      const target = event.target instanceof Element ? event.target : null;
       if (target?.closest('input, textarea, select, [contenteditable], [role="dialog"], [role="slider"], [role="menu"], [data-timeline]')) return;
-      const boxes = nodes.filter((node) => !node.data.group).map((node) => {
-        const parent = node.parentId ? nodes.find((candidate) => candidate.id === node.parentId) : null;
-        return { id: node.id, x: node.position.x + (parent?.position.x || 0), y: node.position.y + (parent?.position.y || 0), w: Number(node.style?.width || NODE_W), h: Number(node.style?.height || NODE_H) };
-      });
-      const next = neighborInDirection(selectedId, boxes, edges, event.key as ArrowKey);
+      const byNodeId = new Map(nodes.map((node) => [node.id, node]));
+      const boxes = nodes
+        .filter((node) => !node.data.group)
+        .map((node) => ({ id: node.id, ...absolutePosition(node, byNodeId), w: Number(node.style?.width || NODE_W), h: Number(node.style?.height || NODE_H) }));
+      const next = neighborInDirection(selectedId, boxes, edges, arrowKey);
       // Capture even a dead end so React Flow does not nudge the focused card.
       event.preventDefault();
       event.stopPropagation();

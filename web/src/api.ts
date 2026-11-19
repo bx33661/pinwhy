@@ -16,64 +16,99 @@ export class NodeConflict extends Error {
   }
 }
 
+export class ApiError extends Error {
+  readonly status?: number;
+  readonly code?: string;
+  readonly definitive: boolean;
+  constructor(message: string, options: { status?: number; code?: string; definitive?: boolean } = {}) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = options.status;
+    this.code = options.code;
+    this.definitive = options.definitive ?? false;
+  }
+}
+
+const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
+const hasId = (value: unknown): value is Record<string, unknown> & { id: string } => record(value) && typeof value.id === 'string' && value.id.length > 0;
+const stringList = (value: unknown): string[] => Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+
+const DEFINITIVE_STATUSES = new Set([403, 413, 415]);
+const DEFINITIVE_REASON_RE = /^(?:body must be a JSON object|parent and target cannot be combined|nothing to change;|title is required|from and to are required strings|id is required|invalid (?:node state|severity|confidence):|no such (?:node|source node|target node|relation):)/;
+const DEFINITIVE_FIELD_RE = /^(?:type|detail|parent|target|relation|status|severity|confidence|at|label|tags|kind|rejectTruncation|expected(?:\.[a-z]+)?) must (?:be|contain)/;
+
+export function classifyApiError(status: number, envelope: Record<string, unknown> | null): NodeConflict | ApiError {
+  if (status === 409 && envelope?.error === 'node_conflict') {
+    return new NodeConflict(stringList(envelope.fields));
+  }
+  if (envelope?.code === 'input_too_long' || envelope?.error === 'input_too_long') {
+    const labels: Record<string, string> = { title: t('edit.title'), detail: t('edit.detail') };
+    const fields = stringList(envelope.fields).map((field) => Object.hasOwn(labels, field) ? labels[field] : field).join(', ');
+    return new ApiError(t('api.inputTooLong', { fields }), { status, definitive: true });
+  }
+  const ref = typeof envelope?.asOf === 'string' ? envelope.asOf : typeof envelope?.since === 'string' ? envelope.since : '';
+  const message = envelope?.error === 'read_only' ? t('api.readOnly')
+    : envelope?.error === 'checkpoint_not_found' ? t('api.checkpointNotFound', { id: ref })
+    : envelope?.code === 'ambiguous_ref' ? t('api.ambiguousRef', { id: ref, candidates: stringList(envelope.candidates).join(', ') })
+    : typeof envelope?.error === 'string' && envelope.error ? envelope.error : t('api.failed', { status });
+  const reason = typeof envelope?.error === 'string' ? envelope.error : '';
+  const definitive = DEFINITIVE_STATUSES.has(status) || envelope?.code === 'ambiguous_ref'
+    || DEFINITIVE_REASON_RE.test(reason) || DEFINITIVE_FIELD_RE.test(reason);
+  return new ApiError(message, { status, definitive });
+}
+
 async function send<T>(method: string, url: string, body?: unknown, requestId?: string): Promise<T> {
   let response: Response;
   try {
     response = await fetch(endpoint(url), { method, headers: { 'Content-Type': 'application/json', ...(requestId ? { 'Idempotency-Key': requestId } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
   } catch {
-    throw Object.assign(new Error(t('api.noResponse')), { code: 'no_response' });
+    throw new ApiError(t('api.noResponse'), { code: 'no_response' });
   }
   let data: unknown;
   try { data = await response.json(); }
   catch { /* An unreadable error body still has a useful HTTP status. */ }
-  const envelope = data !== null && typeof data === 'object' && !Array.isArray(data) ? data as Record<string, unknown> : null;
-  if (!response.ok) {
-    if (response.status === 409 && envelope?.error === 'node_conflict') {
-      throw new NodeConflict(Array.isArray(envelope.fields) ? envelope.fields.filter((field): field is string => typeof field === 'string') : []);
-    }
-    if (envelope?.code === 'input_too_long' || envelope?.error === 'input_too_long') {
-      const labels: Record<string, string> = { title: t('edit.title'), detail: t('edit.detail') };
-      const fields = Array.isArray(envelope.fields) ? envelope.fields.filter((field): field is string => typeof field === 'string').map((field) => Object.hasOwn(labels, field) ? labels[field] : field).join(', ') : '';
-      throw Object.assign(new Error(t('api.inputTooLong', { fields })), { status: response.status, definitive: true });
-    }
-    const ref = typeof envelope?.asOf === 'string' ? envelope.asOf : typeof envelope?.since === 'string' ? envelope.since : '';
-    const message = envelope?.error === 'read_only' ? t('api.readOnly')
-      : envelope?.error === 'checkpoint_not_found' ? t('api.checkpointNotFound', { id: ref })
-      : envelope?.code === 'ambiguous_ref' ? t('api.ambiguousRef', { id: ref, candidates: Array.isArray(envelope.candidates) ? envelope.candidates.filter((item): item is string => typeof item === 'string').join(', ') : '' })
-      : typeof envelope?.error === 'string' && envelope.error ? envelope.error : t('api.failed', { status: response.status });
-    const reason = typeof envelope?.error === 'string' ? envelope.error : '';
-    const definitive = [403, 413, 415].includes(response.status) || envelope?.code === 'ambiguous_ref'
-      || /^(?:body must be a JSON object|parent and target cannot be combined|nothing to change;|title is required|from and to are required strings|id is required|invalid (?:node state|severity|confidence):|no such (?:node|source node|target node|relation):)/.test(reason)
-      || /^(?:type|detail|parent|target|relation|status|severity|confidence|at|label|tags|kind|rejectTruncation|expected(?:\.[a-z]+)?) must (?:be|contain)/.test(reason);
-    throw Object.assign(new Error(message), { status: response.status, definitive });
-  }
-  if (!envelope) {
-    throw Object.assign(new Error(t('api.invalidResponse', { status: response.status })), { code: 'invalid_response', status: response.status });
-  }
+  const envelope = record(data) ? data : null;
+  if (!response.ok) throw classifyApiError(response.status, envelope);
+  if (!envelope) throw new ApiError(t('api.invalidResponse', { status: response.status }), { code: 'invalid_response', status: response.status });
   return data as T;
 }
 
-type Command = 'addNode' | 'patchNode' | 'addEdge' | 'removeNode' | 'removeEdge';
-type WriteSpec = { command: Command; method: string; url: string; body?: unknown; id?: string };
+type AddNodeBody = NodeInput & { rejectTruncation: true };
+type PatchNodeBody = NodePatch & { rejectTruncation: true };
+type AddEdgeBody = { from: string; to: string; kind: string; label?: string; rejectTruncation: true };
+
+export type WriteSpec =
+  | { command: 'addNode'; method: 'POST'; url: string; body: AddNodeBody }
+  | { command: 'patchNode'; method: 'PATCH'; url: string; id: string; body: PatchNodeBody }
+  | { command: 'removeNode'; method: 'DELETE'; url: string; id: string }
+  | { command: 'addEdge'; method: 'POST'; url: string; body: AddEdgeBody }
+  | { command: 'removeEdge'; method: 'DELETE'; url: string; id: string };
+
 type OriginalRequest = WriteSpec & { requestId: string; serialized?: string };
-const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
-const hasId = (value: unknown): value is Record<string, unknown> & { id: string } => record(value) && typeof value.id === 'string' && value.id.length > 0;
+
+function freezeRequest(spec: WriteSpec, requestId: string): OriginalRequest {
+  if (spec.command === 'removeNode' || spec.command === 'removeEdge') return { ...spec, requestId };
+  const serialized = JSON.stringify(spec.body);
+  return { ...spec, body: JSON.parse(serialized), serialized, requestId };
+}
 
 function validResult(request: OriginalRequest, result: unknown): boolean {
   if (!record(result)) return false;
-  const body = request.body as Record<string, unknown> | undefined;
   if (request.command === 'addNode') {
     if (!hasId(result.node) || typeof result.node.title !== 'string' || typeof result.node.type !== 'string'
       || !Array.isArray(result.edges) || !result.edges.every(hasId)) return false;
     const nodeId = result.node.id;
-    if (body?.target || body?.parent) return result.edges.length === 1 && result.edges.some((edge) =>
-      record(edge) && edge.from === (body.target ? nodeId : body.parent)
-      && edge.to === (body.target || nodeId) && edge.kind === (body.relation || 'related-to'));
+    const { target, parent, relation } = request.body;
+    if (target || parent) {
+      return result.edges.length === 1 && result.edges.some((edge) =>
+        edge.from === (target ? nodeId : parent)
+        && edge.to === (target || nodeId) && edge.kind === (relation || 'related-to'));
+    }
     return result.edges.length === 0;
   }
-  if (!hasId(result) || (request.id && result.id !== request.id)) return false;
+  if (!hasId(result) || ('id' in request && request.id && result.id !== request.id)) return false;
   if (request.command === 'removeNode') return Array.isArray(result.edges) && result.edges.every((id) => typeof id === 'string');
-  if (request.command === 'addEdge') return result.from === body?.from && result.to === body?.to && result.kind === body?.kind;
+  if (request.command === 'addEdge') return result.from === request.body.from && result.to === request.body.to && result.kind === request.body.kind;
   if (request.command === 'removeEdge') return typeof result.from === 'string' && typeof result.to === 'string' && typeof result.kind === 'string';
   return typeof result.type === 'string' && typeof result.title === 'string';
 }
@@ -113,18 +148,19 @@ export class WriteOperation {
     return this.flight;
   }
   submit<T>(spec: WriteSpec): Promise<T> {
-    const serialized = spec.body === undefined ? undefined : JSON.stringify(spec.body);
+    const serialized = 'body' in spec ? JSON.stringify(spec.body) : undefined;
     if (this.request) {
       if (this.request.command !== spec.command || this.request.url !== spec.url || this.request.serialized !== serialized) {
         return Promise.reject(new Error(t('write.payloadLocked')));
       }
       return (this.flight || Promise.reject(new Error(t('write.payloadLocked')))) as Promise<T>;
     }
-    this.request = { ...spec, body: serialized === undefined ? undefined : JSON.parse(serialized), serialized, requestId: crypto.randomUUID() };
+    this.request = freezeRequest(spec, crypto.randomUUID());
     return this.singleflight(() => this.transmit()) as Promise<T>;
   }
   private async inspect() {
-    const request = this.request!;
+    const request = this.request;
+    if (!request) throw new Error(t('write.unknown'));
     const data = await send<unknown>('GET', `/api/receipt?requestId=${encodeURIComponent(request.requestId)}`);
     if (!record(data) || data.schema !== 'pinwhy.receipt-response.v1' || data.readOnly !== true || !record(data.receipt)) throw new Error(t('write.unknown'));
     const receipt = data.receipt;
@@ -138,19 +174,20 @@ export class WriteOperation {
     this.uncertain = true;
     this.error = t('write.unknown');
     try { return await this.inspect(); }
-    catch { throw Object.assign(new Error(this.error || t('write.unknown')), { code: 'write_unconfirmed' }); }
+    catch { throw new ApiError(this.error || t('write.unknown'), { code: 'write_unconfirmed' }); }
   }
   private async transmit() {
-    const request = this.request!;
+    const request = this.request;
+    if (!request) return undefined;
     let result: unknown;
     try {
-      result = await send(request.method, request.url, request.body, request.requestId);
+      const body = 'body' in request ? request.body : undefined;
+      result = await send(request.method, request.url, body, request.requestId);
     } catch (error) {
-      const failure = error as { definitive?: boolean; status?: number };
-      if (error instanceof NodeConflict || (failure.definitive === true && (!this.uncertain || failure.status !== 403))) {
+      if (error instanceof NodeConflict || (error instanceof ApiError && error.definitive && (!this.uncertain || error.status !== 403))) {
         this.request = null;
         this.uncertain = false;
-        this.error = error instanceof Error ? error.message : String(error);
+        this.error = error.message;
         this.onReject?.(error);
         this.onSuccess = undefined; this.onReject = undefined;
         throw error;

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { ChevronDown, ChevronRight, Link2, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
+import { ChevronDown, ChevronRight, Link2, Pencil, Plus, Trash2, X, type LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -15,8 +15,48 @@ import { EMPTY_NEW, parseTags, sourceLocation } from '../research-state';
 
 const field = 'w-full rounded-md border border-strong bg-card px-2 text-[13px] text-foreground outline-none transition-colors placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring';
 
+type DimensionKey = 'status' | 'severity' | 'confidence';
+const DIMENSIONS: readonly { key: DimensionKey; labelKey: 'inspector.status' | 'inspector.risk' | 'inspector.confidence'; options: readonly string[]; format: (value?: string | null) => string }[] = [
+  { key: 'status', labelKey: 'inspector.status', options: api.SETTABLE_STATUSES, format: statusLabel },
+  { key: 'severity', labelKey: 'inspector.risk', options: api.SETTABLE_SEVERITIES, format: severityLabel },
+  { key: 'confidence', labelKey: 'inspector.confidence', options: api.SETTABLE_CONFIDENCES, format: confidenceLabel },
+];
 
 const Error_ = ({ message }: { message: string | null }) => message ? <p role="alert" className="m-0 text-xs text-destructive">{message}</p> : null;
+
+function DimensionSelects({ values, disabled, conflictFields, onChange }: { values: Record<DimensionKey, string>; disabled: boolean; conflictFields?: string[]; onChange: (key: DimensionKey, value: string) => void }) {
+  return (
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+      {DIMENSIONS.map(({ key, labelKey, options, format }) => {
+        const label = t(labelKey);
+        const value = values[key];
+        return <label key={key} className="flex min-w-0 flex-col gap-1 text-xs text-muted-foreground">
+          {label}
+          <select aria-label={label} aria-invalid={conflictFields?.includes(key) || undefined} className={cn(field, 'h-8')} value={value} disabled={disabled} onChange={(e) => onChange(key, e.target.value)}>
+            <option value="">{format()}</option>
+            {value && !options.includes(value) && <option value={value}>{format(value)}</option>}
+            {options.map((item) => <option key={item} value={item}>{format(item)}</option>)}
+          </select>
+        </label>;
+      })}
+    </div>
+  );
+}
+
+function CollapsibleActionSection({ heading, icon: Icon, forceOpen, className, children }: { heading: string; icon: LucideIcon; forceOpen: boolean; className?: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const expanded = open || forceOpen;
+  return (
+    <section className={cn('flex flex-col gap-2 border-t pt-3.5', className)} aria-label={heading}>
+      <button type="button" aria-expanded={expanded} onClick={() => setOpen((value) => !value)} className="group flex w-full items-center gap-1.5 rounded-md py-1 text-left text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
+        <Icon className="size-3.5 shrink-0" aria-hidden="true" />
+        <span className="flex-1">{heading}</span>
+        <ChevronRight className={cn('size-3.5 shrink-0 transition-transform', expanded && 'rotate-90')} aria-hidden="true" />
+      </button>
+      {expanded && children}
+    </section>
+  );
+}
 
 /** Each tag remains one string, including commas, whitespace, and line breaks. */
 function TagFields({ value, onChange, disabled, invalid }: { value: string; onChange: (value: string) => void; disabled: boolean; invalid?: boolean }) {
@@ -37,7 +77,6 @@ function TagFields({ value, onChange, disabled, invalid }: { value: string; onCh
   </fieldset>;
 }
 
-
 /** Only a person's changed fields are drafts; untouched fields always follow the live snapshot. */
 export function EditSection({ node, onReload }: { node: BoardNode; onReload: () => Promise<void> }) {
   const { draft, busy: pending, locked, error, change, discard, save, reloadDraft, reload, remove, startEditing } = useNodeEdit(node, onReload);
@@ -57,23 +96,7 @@ export function EditSection({ node, onReload }: { node: BoardNode; onReload: () 
           <label className="flex flex-col gap-1 text-xs text-muted-foreground">{t('edit.at')}
             <input aria-invalid={draft.conflictFields?.includes('at') || undefined} className={cn(field, 'h-8')} value={draft.fields.at ?? sourceLocation(node)} onChange={(event) => change('at', event.target.value)} disabled={busy} />
           </label>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-            {([
-              { key: 'status', label: t('inspector.status'), values: api.SETTABLE_STATUSES, format: statusLabel },
-              { key: 'severity', label: t('inspector.risk'), values: api.SETTABLE_SEVERITIES, format: severityLabel },
-              { key: 'confidence', label: t('inspector.confidence'), values: api.SETTABLE_CONFIDENCES, format: confidenceLabel },
-            ] as const).map(({ key, label, values, format }) => {
-              const value = draft.fields[key] ?? node[key] ?? '';
-              return <label key={key} className="flex min-w-0 flex-col gap-1 text-xs text-muted-foreground">
-                {label}
-                <select aria-label={label} aria-invalid={draft.conflictFields?.includes(key) || undefined} className={cn(field, 'h-8')} value={value} disabled={busy} onChange={(e) => change(key, e.target.value)}>
-                  <option value="">{format()}</option>
-                  {value && !(values as readonly string[]).includes(value) && <option value={value}>{format(value)}</option>}
-                  {values.map((item) => <option key={item} value={item}>{format(item)}</option>)}
-                </select>
-              </label>;
-            })}
-          </div>
+          <DimensionSelects values={{ status: draft.fields.status ?? node.status ?? '', severity: draft.fields.severity ?? node.severity ?? '', confidence: draft.fields.confidence ?? node.confidence ?? '' }} disabled={busy} conflictFields={draft.conflictFields} onChange={change} />
           <p className="m-0 text-[11px] text-muted-foreground">{t('edit.draftHint')}</p>
           <div className="flex flex-wrap gap-2">
             <Button type="submit" variant="default" size="sm" disabled={busy || !title.trim() || draft.conflict}>{t('edit.save')}</Button>
@@ -89,7 +112,6 @@ export function EditSection({ node, onReload }: { node: BoardNode; onReload: () 
       ) : (
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" disabled={busy} onClick={startEditing}><Pencil className="size-3.5" />{t('edit.editText')}</Button>
-
         </div>
       )}
       {!draft.conflict && <Error_ message={error} />}
@@ -114,24 +136,10 @@ function TypePicker({ value, disabled, onChange }: { value: string; disabled: bo
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverAnchor asChild>
         <div className="flex w-36 shrink-0 items-center overflow-hidden rounded-md border border-strong bg-card focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-ring">
-          <span className="flex shrink-0 items-center pl-2" aria-hidden="true">
-            <TypeDot type={value} className="size-2" />
-          </span>
-          <input
-            aria-label={t('edit.type')}
-            className="h-8 min-w-0 flex-1 bg-transparent px-1.5 text-[13px] text-foreground outline-none placeholder:text-muted-foreground"
-            value={value}
-            disabled={disabled}
-            onChange={(event) => onChange(event.target.value)}
-          />
+          <span className="flex shrink-0 items-center pl-2" aria-hidden="true"><TypeDot type={value} className="size-2" /></span>
+          <input aria-label={t('edit.type')} className="h-8 min-w-0 flex-1 bg-transparent px-1.5 text-[13px] text-foreground outline-none placeholder:text-muted-foreground" value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} />
           <PopoverTrigger asChild>
-            <button
-              type="button"
-              aria-label={t('edit.chooseType')}
-              title={t('edit.chooseType')}
-              disabled={disabled}
-              className="flex h-8 shrink-0 items-center justify-center border-l px-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
-            >
+            <button type="button" aria-label={t('edit.chooseType')} title={t('edit.chooseType')} disabled={disabled} className="flex h-8 shrink-0 items-center justify-center border-l px-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50">
               <ChevronDown className="size-3.5" />
             </button>
           </PopoverTrigger>
@@ -142,16 +150,7 @@ function TypePicker({ value, disabled, onChange }: { value: string; disabled: bo
           {api.CREATABLE_TYPES.map((item) => {
             const active = value === item;
             return (
-              <button
-                key={item}
-                type="button"
-                aria-pressed={active}
-                onClick={() => { onChange(item); setOpen(false); }}
-                className={cn(
-                  'flex items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent',
-                  active && 'bg-accent font-medium text-foreground',
-                )}
-              >
+              <button key={item} type="button" aria-pressed={active} onClick={() => { onChange(item); setOpen(false); }} className={cn('flex items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent', active && 'bg-accent font-medium text-foreground')}>
                 <TypeDot type={item} className="size-2" />
                 <span className="text-muted-foreground"><NodeTypeIcon type={item} size={12} /></span>
                 <span className="min-w-0 flex-1 truncate">{typeLabel(item)}</span>
@@ -180,11 +179,7 @@ function NodeFormView({ current, form, autoFocus }: { current?: BoardNode; form:
       <textarea aria-label={t('edit.detail')} className={cn(field, 'min-h-16 py-1.5')} value={draft.detail} disabled={busy} onChange={(event) => change('detail', event.target.value)} placeholder={t('edit.detailPlaceholder')} />
       <TagFields value={draft.tags} onChange={(value) => change('tags', value)} disabled={busy} />
       <label className="flex flex-col gap-1 text-xs text-muted-foreground">{t('edit.at')}<input className={cn(field, 'h-8')} value={draft.at} disabled={busy} onChange={(event) => change('at', event.target.value)} /></label>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">{([
-        { key: 'status', label: t('inspector.status'), options: api.SETTABLE_STATUSES, format: statusLabel },
-        { key: 'severity', label: t('inspector.risk'), options: api.SETTABLE_SEVERITIES, format: severityLabel },
-        { key: 'confidence', label: t('inspector.confidence'), options: api.SETTABLE_CONFIDENCES, format: confidenceLabel },
-      ] as const).map(({ key, label, options, format }) => <label key={key} className="flex min-w-0 flex-col gap-1 text-xs text-muted-foreground">{label}<select className={cn(field, 'h-8')} value={draft[key]} disabled={busy} onChange={(event) => change(key, event.target.value)}><option value="">{format()}</option>{options.map((value) => <option key={value} value={value}>{format(value)}</option>)}</select></label>)}</div>
+      <DimensionSelects values={{ status: draft.status, severity: draft.severity, confidence: draft.confidence }} disabled={busy} onChange={change} />
       {current && (
         <select aria-label={t('edit.relation')} className={cn(field, 'h-8')} value={link} disabled={busy} onChange={(e) => change('link', e.target.value)}>
           {api.LINKS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
@@ -212,24 +207,8 @@ function NodeFormView({ current, form, autoFocus }: { current?: BoardNode; form:
 
 export function AddSection({ node }: { node: BoardNode }) {
   const form = useNodeCreate(node);
-  const [open, setOpen] = useState(false);
   const hasState = JSON.stringify(form.draft) !== JSON.stringify(EMPTY_NEW) || form.locked || Boolean(form.error);
-  const expanded = open || hasState;
-  return (
-    <section className="mt-4 flex flex-col gap-2 border-t pt-3.5" aria-label={t('edit.related')}>
-      <button
-        type="button"
-        aria-expanded={expanded}
-        onClick={() => setOpen((value) => !value)}
-        className="group flex w-full items-center gap-1.5 rounded-md py-1 text-left text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <Plus className="size-3.5 shrink-0" aria-hidden="true" />
-        <span className="flex-1">{t('edit.related')}</span>
-        <ChevronRight className={cn('size-3.5 shrink-0 transition-transform', expanded && 'rotate-90')} aria-hidden="true" />
-      </button>
-      {expanded && <NodeFormView current={node} form={form} />}
-    </section>
-  );
+  return <CollapsibleActionSection heading={t('edit.related')} icon={Plus} forceOpen={hasState} className="mt-4"><NodeFormView current={node} form={form} /></CollapsibleActionSection>;
 }
 
 function StandaloneNodeForm({ onDone }: { onDone: () => void }) {
@@ -257,40 +236,30 @@ export function NewNodeDialog({ open, onOpenChange }: { open: boolean; onOpenCha
 /** Connect existing records explicitly. Selection is UI state, never a cursor move. */
 export function ConnectSection({ node, byId, onReload }: { node: BoardNode; byId: Map<string, BoardNode>; onReload: () => Promise<void> }) {
   const { draft, link, done, busy: pending, locked, error, change, submit } = useNodeConnect(node, byId, onReload);
-  const [open, setOpen] = useState(false);
   const hasState = Boolean(draft.peerId || draft.query || draft.label || locked || error || done);
-  const expanded = open || hasState;
   const busy = pending || locked;
   const peers = [...byId.values()].filter((peer) => peer.id !== node.id && (peer.id === draft.peerId || matchesNode(peer, draft.query)));
-  return <section className="mt-5 flex flex-col gap-2 border-t pt-3.5" aria-label={t('connect.heading')}>
-    <button
-      type="button"
-      aria-expanded={expanded}
-      onClick={() => setOpen((value) => !value)}
-      className="group flex w-full items-center gap-1.5 rounded-md py-1 text-left text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-    >
-      <Link2 className="size-3.5 shrink-0" aria-hidden="true" />
-      <span className="flex-1">{t('connect.heading')}</span>
-      <ChevronRight className={cn('size-3.5 shrink-0 transition-transform', expanded && 'rotate-90')} aria-hidden="true" />
-    </button>
-    {expanded && <form className="flex flex-col gap-2" onSubmit={submit}>
-      <input aria-label={t('connect.search')} placeholder={t('connect.search')} className={cn(field, 'h-8')} value={draft.query} disabled={busy} onChange={(e) => change('query', e.target.value)} />
-      <select aria-label={t('connect.peer')} className={cn(field, 'h-8')} value={draft.peerId} disabled={busy} onChange={(e) => change('peerId', e.target.value)}>
-        <option value="">{t('connect.peer')}</option>
-        {peers.map((peer) => <option key={peer.id} value={peer.id}>{peer.id} · {peer.title}</option>)}
-      </select>
-      <select aria-label={t('connect.kind')} className={cn(field, 'h-8')} value={draft.kind} disabled={busy} onChange={(event) => change('kind', event.target.value)}>
-        {['related-to', 'answers', 'derived-from', 'supports', 'contradicts', 'depends-on', 'proves', 'caused-by', 'refines', 'duplicates', 'supersedes', 'resolves'].map((kind) => <option key={kind} value={kind}>{relationLabel(kind)}</option>)}
-      </select>
-      <label className="flex flex-col gap-1 text-xs text-muted-foreground">{t('inspector.relationLabel')}<input className={cn(field, 'h-8')} value={draft.label} disabled={busy} onChange={(event) => change('label', event.target.value)} /></label>
-      <select aria-label={t('connect.direction')} className={cn(field, 'h-8')} value={draft.direction} disabled={busy} onChange={(e) => change('direction', e.target.value as 'outgoing' | 'incoming')}>
-        <option value="outgoing">{t('connect.outgoing')}</option><option value="incoming">{t('connect.incoming')}</option>
-      </select>
-      {link && <p aria-label={t('connect.preview')} className="m-0 break-words rounded-md border bg-secondary p-2 font-mono text-xs">{link.from} — {relationLabel(link.kind)} → {link.to}</p>}
-      <p className="m-0 text-[11px] text-muted-foreground">{t('connect.hint')}</p>
-      <Button type="submit" variant="outline" size="sm" className="self-start" disabled={busy || !link || !byId.has(draft.peerId)}><Link2 className="size-3.5" />{t('connect.submit')}</Button>
-      {done && <p role="status" className="m-0 text-xs text-muted-foreground">{t('connect.done')}</p>}
-      <Error_ message={error} />
-    </form>}
-  </section>;
+  return (
+    <CollapsibleActionSection heading={t('connect.heading')} icon={Link2} forceOpen={hasState} className="mt-5">
+      <form className="flex flex-col gap-2" onSubmit={submit}>
+        <input aria-label={t('connect.search')} placeholder={t('connect.search')} className={cn(field, 'h-8')} value={draft.query} disabled={busy} onChange={(e) => change('query', e.target.value)} />
+        <select aria-label={t('connect.peer')} className={cn(field, 'h-8')} value={draft.peerId} disabled={busy} onChange={(e) => change('peerId', e.target.value)}>
+          <option value="">{t('connect.peer')}</option>
+          {peers.map((peer) => <option key={peer.id} value={peer.id}>{peer.id} · {peer.title}</option>)}
+        </select>
+        <select aria-label={t('connect.kind')} className={cn(field, 'h-8')} value={draft.kind} disabled={busy} onChange={(event) => change('kind', event.target.value)}>
+          {['related-to', 'answers', 'derived-from', 'supports', 'contradicts', 'depends-on', 'proves', 'caused-by', 'refines', 'duplicates', 'supersedes', 'resolves'].map((kind) => <option key={kind} value={kind}>{relationLabel(kind)}</option>)}
+        </select>
+        <label className="flex flex-col gap-1 text-xs text-muted-foreground">{t('inspector.relationLabel')}<input className={cn(field, 'h-8')} value={draft.label} disabled={busy} onChange={(event) => change('label', event.target.value)} /></label>
+        <select aria-label={t('connect.direction')} className={cn(field, 'h-8')} value={draft.direction} disabled={busy} onChange={(e) => change('direction', e.target.value === 'incoming' ? 'incoming' : 'outgoing')}>
+          <option value="outgoing">{t('connect.outgoing')}</option><option value="incoming">{t('connect.incoming')}</option>
+        </select>
+        {link && <p aria-label={t('connect.preview')} className="m-0 break-words rounded-md border bg-secondary p-2 font-mono text-xs">{link.from} — {relationLabel(link.kind)} → {link.to}</p>}
+        <p className="m-0 text-[11px] text-muted-foreground">{t('connect.hint')}</p>
+        <Button type="submit" variant="outline" size="sm" className="self-start" disabled={busy || !link || !byId.has(draft.peerId)}><Link2 className="size-3.5" />{t('connect.submit')}</Button>
+        {done && <p role="status" className="m-0 text-xs text-muted-foreground">{t('connect.done')}</p>}
+        <Error_ message={error} />
+      </form>
+    </CollapsibleActionSection>
+  );
 }

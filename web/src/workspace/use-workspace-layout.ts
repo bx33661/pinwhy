@@ -1,15 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
-import { useEdgesState, useNodesState, useUpdateNodeInternals, type Edge } from '@xyflow/react';
-import { layoutGraph, type CanvasNode, type Positions } from '../graph';
+import { useEdgesState, useNodesState, useUpdateNodeInternals } from '@xyflow/react';
+import { layoutGraph, type CanvasEdge, type CanvasNode, type Positions } from '../graph';
 import type { ViewMode } from '../types';
 import { layoutAudit } from './audit-layout';
 
-export type WorkspaceProjection = { nodes: CanvasNode[]; edges: Edge[]; audit?: boolean };
+export type WorkspaceProjection = { nodes: CanvasNode[]; edges: CanvasEdge[]; audit?: boolean };
 
 /** One layout supplies both canvases. Content refreshes keep dragged positions and routed edges. */
 export function useWorkspaceLayout(projection: WorkspaceProjection | null, mode: ViewMode, direction: 'RIGHT' | 'DOWN') {
   const [nodes, setNodes, onNodesChange] = useNodesState<CanvasNode>([]);
-  const [edges, setEdges] = useEdgesState<Edge>([]);
+  const [edges, setEdges] = useEdgesState<CanvasEdge>([]);
   const [layoutRevision, setLayoutRevision] = useState(0);
   const [layoutMode, setLayoutMode] = useState<ViewMode | null>(null);
   const [laying, setLaying] = useState(0);
@@ -51,7 +51,7 @@ export function useWorkspaceLayout(projection: WorkspaceProjection | null, mode:
         };
       }));
       setEdges((previous) => {
-        const routes = new Map(previous.map((edge) => [edge.id, (edge.data as { route?: unknown } | undefined)?.route]));
+        const routes = new Map(previous.map((edge) => [edge.id, edge.data.route]));
         return projection.edges.map((edge) => ({ ...edge, data: { ...edge.data, route: routes.get(edge.id) } }));
       });
       return;
@@ -59,7 +59,12 @@ export function useWorkspaceLayout(projection: WorkspaceProjection | null, mode:
     let cancelled = false;
     const viewKey = `${projection.audit ? 'audit' : 'general'}:${mode}:${direction}`;
     const slow = window.setTimeout(() => setLaying(projection.nodes.length), 300);
-    const layout = projection.audit ? Promise.resolve(layoutAudit(projection.nodes, projection.edges)) : layoutGraph(projection.nodes, projection.edges, direction, mode === 'all', overviewColumns, lastPositions.current.get(viewKey));
+    const layout = projection.audit
+      ? Promise.resolve({
+          nodes: layoutAudit(projection.nodes, projection.edges).nodes,
+          edges: projection.edges.map((edge) => ({ ...edge, data: { ...edge.data, route: undefined } })),
+        })
+      : layoutGraph(projection.nodes, projection.edges, direction, mode === 'all', overviewColumns, lastPositions.current.get(viewKey));
     layout.then((layouted) => {
       if (cancelled) return;
       const allowMotion = hasMounted.current && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;

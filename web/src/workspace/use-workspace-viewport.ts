@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { getNodesBounds, getViewportForBounds, useNodesInitialized, useReactFlow, type Edge } from '@xyflow/react';
 import { focusedIds, frameStrategy, pickFocus } from '../canvas-state';
-import { NODE_H, NODE_W, type CanvasNode } from '../graph';
+import { absolutePosition, NODE_H, NODE_W, type CanvasNode } from '../graph';
 import type { ViewMode } from '../types';
 
 type Options = {
@@ -38,10 +38,10 @@ export function useWorkspaceViewport({ viewportRef, pendingFocus, layoutRevision
     // The desktop inspector floats over the right edge; centre in the remaining space.
     const overlay = reserveInspector && width >= 640 ? Math.min(372, width * .5) : 0;
     const zoom = Math.min(1, Math.max(.55, (width - overlay) / (NODE_W + 48)));
-    const parent = node.parentId ? getNode(node.parentId) : null;
+    const pos = absolutePosition(node, getNode);
     setCenter(
-      node.position.x + (parent?.position.x || 0) + (node.data.compact ? 120 : NODE_W / 2) + overlay / (2 * zoom),
-      node.position.y + (parent?.position.y || 0) + Number(node.style?.height || NODE_H) / 2,
+      pos.x + (node.data.compact ? 120 : NODE_W / 2) + overlay / (2 * zoom),
+      pos.y + Number(node.style?.height || NODE_H) / 2,
       { zoom, duration },
     );
   }, [getNode, setCenter, viewportRef, motion]);
@@ -92,10 +92,7 @@ export function useWorkspaceViewport({ viewportRef, pendingFocus, layoutRevision
     const byNodeId = new Map(all.map((node) => [node.id, node]));
     const targets = all
       .filter((node) => !node.data.group && ids.has(node.id))
-      .map((node) => {
-        const parent = node.parentId ? byNodeId.get(node.parentId) : null;
-        return parent ? { ...node, position: { x: node.position.x + parent.position.x, y: node.position.y + parent.position.y } } : node;
-      });
+      .map((node) => (node.parentId ? { ...node, position: absolutePosition(node, byNodeId) } : node));
     if (targets.length <= 1) {
       centerOnNode(id, true, motion);
       return;

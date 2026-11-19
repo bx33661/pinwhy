@@ -13,6 +13,14 @@ export type EmbedLocale = 'zh-CN' | 'zh-HK' | 'en' | 'ja';
 
 export const EMBED_LOCALES: readonly EmbedLocale[] = ['zh-CN', 'zh-HK', 'en', 'ja'];
 
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+export function isEmbedLocale(value: unknown): value is EmbedLocale {
+  return typeof value === 'string' && EMBED_LOCALES.some((candidate) => candidate === value);
+}
+
 export const FONT_SIZE_RANGE = { min: 10, max: 22 } as const;
 export const CODE_FONT_SIZE_RANGE = { min: 10, max: 16 } as const;
 
@@ -43,7 +51,7 @@ export type EmbedPresentation = {
 
 const appearance = (value: unknown): EmbedAppearance | null => value === 'light' || value === 'dark' ? value : null;
 
-const locale = (value: unknown): EmbedLocale | null => typeof value === 'string' && EMBED_LOCALES.includes(value as EmbedLocale) ? value as EmbedLocale : null;
+const locale = (value: unknown): EmbedLocale | null => isEmbedLocale(value) ? value : null;
 
 /** A family list is inert CSS once set as a custom property, but keep it a family list, not a stylesheet. */
 const family = (value: unknown): string | null => {
@@ -109,17 +117,15 @@ export type HostAppearance = {
  * wrong type, unknown vocabulary, or no usable field — is ignored instead of repainting the board.
  */
 export function hostAppearance(data: unknown): HostAppearance | null {
-  if (!data || typeof data !== 'object') return null;
-  const message = data as Record<string, unknown>;
-  if (message.type !== APPEARANCE_MESSAGE) return null;
+  if (!isRecord(data) || data.type !== APPEARANCE_MESSAGE) return null;
   const update: HostAppearance = {
-    theme: appearance(message.theme),
-    locale: locale(message.locale),
+    theme: appearance(data.theme),
+    locale: locale(data.locale),
     fonts: {
-      fontFamily: family(message.fontFamily),
-      codeFontFamily: family(message.codeFontFamily),
-      fontSize: size(message.fontSize, FONT_SIZE_RANGE),
-      codeFontSize: size(message.codeFontSize, CODE_FONT_SIZE_RANGE),
+      fontFamily: family(data.fontFamily),
+      codeFontFamily: family(data.codeFontFamily),
+      fontSize: size(data.fontSize, FONT_SIZE_RANGE),
+      codeFontSize: size(data.codeFontSize, CODE_FONT_SIZE_RANGE),
     },
   };
   const typed = update.theme !== null || update.locale !== null || Object.values(update.fonts).some((value) => value !== null);
@@ -128,9 +134,8 @@ export function hostAppearance(data: unknown): HostAppearance | null {
 
 /** A navigate message names one node; the board decides whether it can be revealed. */
 export function hostNavigate(data: unknown): string | null {
-  if (!data || typeof data !== 'object') return null;
-  const message = data as Record<string, unknown>;
-  return message.type === NAVIGATE_MESSAGE ? nodeId(message.nodeId) : null;
+  if (!isRecord(data)) return null;
+  return data.type === NAVIGATE_MESSAGE ? nodeId(data.nodeId) : null;
 }
 
 export type ReferenceResult = {
@@ -142,13 +147,11 @@ export type ReferenceResult = {
 
 /** The host's answer to `pinwhy:reference`. Ids are opaque: only the matching request is settled. */
 export function hostReferenceResult(data: unknown): ReferenceResult | null {
-  if (!data || typeof data !== 'object') return null;
-  const message = data as Record<string, unknown>;
-  if (message.type !== REFERENCE_RESULT_MESSAGE) return null;
-  if (typeof message.requestId !== 'string' || message.requestId.length === 0 || message.requestId.length > 128) return null;
-  if (typeof message.ok !== 'boolean') return null;
-  const detail = typeof message.message === 'string' ? message.message.trim().slice(0, 500) : '';
-  return { requestId: message.requestId, ok: message.ok, message: detail || null };
+  if (!isRecord(data) || data.type !== REFERENCE_RESULT_MESSAGE) return null;
+  if (typeof data.requestId !== 'string' || data.requestId.length === 0 || data.requestId.length > 128) return null;
+  if (typeof data.ok !== 'boolean') return null;
+  const detail = typeof data.message === 'string' ? data.message.trim().slice(0, 500) : '';
+  return { requestId: data.requestId, ok: data.ok, message: detail || null };
 }
 
 /** The board sends the node id and its own correlation id; the host rereads the canonical node. */
