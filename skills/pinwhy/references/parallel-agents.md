@@ -39,6 +39,8 @@ pinwhy checkpoint --summary "本波确认内容；仍开放的问题" --cwd "/�
 
 `--request-id` 必填，用波次或文件名这类稳定的名字；命令中断或不确定是否写入时，用同一 ID 重试，不会重复写入。批量写入不移动游标，也不包含删除和检查点。CLI 声明了 `features.batchCheck` 时，可以先用 `batch --check --file …` 校验，它不写入，也不需要 `--request-id`。输入格式见 `pinwhy batch --help`。
 
+注意 `batch` 中的 `ref` 只是本批内部的临时别名，最终节点 ID 由内核按类型自动编号（`fd1`、`f2` 等），从输出 `results[].node.id` 读取：引用同批前面新建的节点时**必须加 `$` 前缀**（如 `"to": "$h"`），也不要在正文中把局部 `ref` 当作最终节点 ID 来引用。
+
 ## Hook 继承边界
 
 Claude 恢复 Hook 使用运行它的宿主进程实际继承的 `PINWHY_AGENT`：SessionStart 的 Digest、PreCompact 的检查点和 Digest 使用该身份；显式启用活动采集时，活动的 agentId 也使用该身份。缺少该环境变量仍是 primary，不从 session ID 推导角色。

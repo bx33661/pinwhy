@@ -108,3 +108,51 @@ test('mixed-size scans remain deterministic, read-only and exactly accounted acr
     assert.deepEqual(graph, before);
   }
 });
+
+test('high-fanout hub cursor with dense Chinese details preserves open threads, findings, facts, retired nodes and relations', () => {
+  const graph = emptyGraph();
+  const body = '合成审计记录：已核对网关校验分支、响应头策略及会话边界。'.repeat(12);
+  graph.nodes.g1 = { id: 'g1', type: 'goal', title: '合成审计目标', status: 'active', ts: 1 };
+  graph.nodes.hub = { id: 'hub', type: 'fact', title: '汇总节点', status: 'done', detail: '汇总全部结果', ts: 100 };
+  graph.cursors['agent:primary'] = { id: 'c1', agentId: 'agent:primary', to: 'hub', at: 100 };
+  graph.nodes.q1 = { id: 'q1', type: 'question', title: '仍待确认的跨会话边界问题', status: 'open', detail: '等待补充测试凭证', ts: 90 };
+  graph.nodes.r1 = { id: 'r1', type: 'hypothesis', title: '已反驳假设一', status: 'refuted', ts: 80 };
+  graph.nodes.r2 = { id: 'r2', type: 'finding', title: '已取代候选二', status: 'superseded', ts: 81 };
+  for (let i = 1; i <= 6; i++) {
+    graph.checkpoints[`cp${i}`] = { id: `cp${i}`, agentId: 'agent:primary', at: 50 + i, summary: `阶段检查点 ${i}：已完成部分验证。` };
+  }
+  for (let i = 1; i <= 15; i++) {
+    const id = `fd${i}`;
+    const factId = `f${i}`;
+    graph.nodes[id] = { id, type: 'finding', title: `发现记录 ${i}`, detail: body, status: 'confirmed', severity: 'medium', confidence: 'reproduced', ts: 20 + i };
+    graph.nodes[factId] = { id: factId, type: 'fact', title: `事实证据 ${i}`, detail: body, status: 'confirmed', confidence: 'reproduced', ts: 40 + i };
+    graph.edges[`${id}->hub`] = { id: `${id}->hub`, from: 'hub', to: id, kind: 'documents', ts: 100 };
+    graph.edges[`${factId}->${id}`] = { id: `${factId}->${id}`, from: factId, to: id, kind: 'supports', ts: 100 };
+  }
+  const before = structuredClone(graph);
+  const packet = buildAgentContext(graph, { budgetTokens: 4000 });
+  assertBudget(packet, 4000);
+  assert.ok(packet.objectives.length > 0);
+  assert.ok(packet.openThreads.some((node) => node.id === 'q1'));
+  assert.ok(packet.findings.length > 0);
+  assert.ok(packet.confirmedFacts.length > 0);
+  assert.ok(packet.retiredNodes.length > 0);
+  assert.ok(packet.relations.length > 0);
+  assert.deepEqual(packet, buildAgentContext(graph, { budgetTokens: 4000 }));
+  assert.deepEqual(graph, before);
+});
+
+test('generous budgets backfill duplicate collection views across focus, objectives, findings and neighborhood', () => {
+  const graph = emptyGraph();
+  graph.nodes.g1 = { id: 'g1', type: 'goal', title: 'Primary goal', status: 'active', ts: 1 };
+  graph.nodes.v1 = { id: 'v1', type: 'vuln', title: 'Primary vuln', severity: 'high', confidence: 'static-confirmed', ts: 2 };
+  graph.edges.e1 = { id: 'e1', from: 'v1', to: 'g1', kind: 'related-to', ts: 3 };
+  const packet = buildAgentContext(graph, { focus: 'v1', budgetTokens: 64000 });
+  assertBudget(packet, 64000);
+  assert.equal(packet.truncated, false);
+  assert.deepEqual(packet.omitted, {});
+  assert.equal(packet.currentFocus?.id, 'v1');
+  assert.deepEqual(packet.objectives.map((node) => node.id), ['g1']);
+  assert.deepEqual(packet.findings.map((node) => node.id), ['v1']);
+  assert.deepEqual(packet.neighborhood.map((entry) => entry.node.id), ['g1']);
+});

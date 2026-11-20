@@ -291,3 +291,31 @@ test('structured originals preserve tag order and absent canonical location fiel
   assert.equal(log(dir), afterClear);
   assert.deepEqual(patchNode(absent.id, { tags: ['new'] }, dir, { expected: { tags: [], loc: null } }).tags, ['new']);
 });
+
+test('compact addNode receipts store large detail once and stay compatible with legacy full-plan logs', (t) => {
+  const dir = fixture(t);
+  const body = 'single-copy-evidence-'.repeat(250);
+  const input = { type: 'observation', title: 'Compact node', detail: body, requestId: 'compact-node-1', enter: true };
+  const created = addNode(input, dir);
+  const eventsText = log(dir);
+  assert.equal(eventsText.split(body).length - 1, 1, 'addNode detail is persisted once');
+  const receipt = getReceipt('compact-node-1', dir);
+  assert.equal(receipt.status, 'committed');
+  assert.deepEqual(receipt.result, created);
+  assert.deepEqual(addNode(input, dir), created);
+
+  // Hand-crafted legacy full-plan receipt still resolves cleanly alongside compact logs.
+  const legacyDir = fixture(t);
+  const legacyNode = { id: 'n1', type: 'note', title: 'Legacy node', ts: 100 };
+  const legacyEv = { eventVersion: 1, eventId: 'event_legacy_1', op: 'node', node: legacyNode };
+  const legacyResult = { node: legacyNode, edge: null, edges: [], cursor: null };
+  const legacyFirst = {
+    ...legacyEv,
+    request: { requestId: 'legacy-1', command: 'addNode', fingerprint: 'legacy-fp', result: legacyResult, events: [legacyEv], at: 100 },
+  };
+  const legacyMarker = { eventVersion: 1, eventId: 'event_legacy_2', op: 'receipt', requestId: 'legacy-1', command: 'addNode', fingerprint: 'legacy-fp', eventIds: ['event_legacy_1'], at: 100 };
+  fs.writeFileSync(paths(legacyDir).events, `${JSON.stringify(legacyFirst)}\n${JSON.stringify(legacyMarker)}\n`);
+  const legacyReceipt = getReceipt('legacy-1', legacyDir);
+  assert.equal(legacyReceipt.status, 'committed');
+  assert.deepEqual(legacyReceipt.result, legacyResult);
+});

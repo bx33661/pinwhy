@@ -1111,6 +1111,46 @@ test('lint exposes audit handoff drift without changing the graph', (t) => {
   assert.equal(fs.readFileSync(paths(dir).events, 'utf8'), before);
 });
 
+test('lint hints at reversed evidence direction and near-synonym relation names without blocking or mutating', (t) => {
+  const dir = fixture(t);
+  const start = addNode({ type: 'start', title: 'Synthetic entry' }, dir).node;
+  const obs = addNode({ type: 'observation', title: 'Synthetic observation' }, dir).node;
+  const q = addNode({ type: 'question', title: 'Synthetic question' }, dir).node;
+  const fBad = addNode({ type: 'finding', title: 'Inverted finding', confidence: 'reproduced' }, dir).node;
+  const fGood = addNode({ type: 'finding', title: 'Derived finding', confidence: 'reproduced' }, dir).node;
+  const fAlias = addNode({ type: 'finding', title: 'Aliased finding', confidence: 'reproduced' }, dir).node;
+  const counter = addNode({ type: 'fact', title: 'Synthetic counterevidence', confidence: 'reproduced' }, dir).node;
+  const doc = addNode({ type: 'note', title: 'Synthetic report note' }, dir).node;
+
+  addEdge({ from: fBad.id, to: obs.id, kind: 'supports' }, dir);
+  addEdge({ from: fBad.id, to: start.id, kind: 'supports' }, dir);
+  addEdge({ from: fGood.id, to: obs.id, kind: 'derived-from' }, dir);
+  addEdge({ from: obs.id, to: fAlias.id, kind: 'supports' }, dir);
+  addEdge({ from: counter.id, to: fAlias.id, kind: 'refutes' }, dir);
+  addEdge({ from: fAlias.id, to: q.id, kind: 'responds-to' }, dir);
+  addEdge({ from: doc.id, to: fGood.id, kind: 'documents' }, dir);
+
+  const before = fs.readFileSync(paths(dir).events, 'utf8');
+  const report = lintGraph(replay(dir));
+  const reversed = report.issues.find((item) => item.code === 'reversed-evidence-direction');
+  assert.equal(reversed?.level, 'info');
+  assert.equal(reversed?.count, 2);
+  assert.deepEqual(reversed?.nodeIds, [fBad.id]);
+
+  const aliases = report.issues.find((item) => item.code === 'relation-aliases');
+  assert.equal(aliases?.level, 'info');
+  assert.equal(aliases?.count, 2);
+  assert.deepEqual(aliases?.aliases, [
+    { used: 'refutes', canonical: 'contradicts', count: 1 },
+    { used: 'responds-to', canonical: 'answers', count: 1 },
+  ]);
+  assert.equal(aliases?.edgeIds.some((id) => id.includes(':documents')), false);
+
+  const cliRun = spawnSyncCli(cliEnv(t, dir), ['lint', '--json']);
+  assert.equal(cliRun.status, 0, cliRun.stderr);
+  assert.equal(fs.readFileSync(paths(dir).events, 'utf8'), before);
+});
+
 test('removing a node takes its relations with it, keeps the log, and clears cursors that pointed at it', (t) => {
   const dir = fixture(t);
   const a = addNode({ type: 'fact', title: 'A', enter: true }, dir).node;

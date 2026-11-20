@@ -16,7 +16,9 @@ metadata:
 - 审计目标写明被审代码的版本：标题带包名@版本或短提交号，detail 写源码的实际位置（安装副本路径，或仓库与提交号）。审计时用的若不是原定那份副本，在目标或第一条观察里如实说明。不同版本之间行号引用不可比，同一个函数可能差出几十行。
 - 开放问题只表达一个可独立结束的验证事项；剩余方向相互独立时分别建问题，并关联已知目标或上游判断。
 - hypothesis 保存待核对解释；fact/observation/result 保存实际检查到的内容与可复核条件，不能用拟执行的实验冒充已观测结果。
-- finding/vuln 可先记录未验证候选，可信度用 `suspected`；已有静态核对证据可直接标 `static-confirmed`，真实复现后才标 `reproduced`，不要求依次升级。漏洞严重度与可信度分开，源码推导不是端到端复现。
+- finding/vuln 可先记录未验证候选，可信度用 `suspected`；已有静态核对证据可直接标 `static-confirmed`，真实复现后才标 `reproduced`，不要求依次升级。漏洞严重度与可信度分开，源码推导不是端到端复现；仅完成部分环节（如仅绕过服务端校验而端到端未闭环）时不要直接把整体利用标成 `reproduced`。
+- 复审中排除为“业务设计如此”“测试环境行为”等非漏洞项时，将原候选设为 `--status deferred`（或 `refuted` 并附反证）并在 `--tag`（如 `by-design`、`env`）与 `--detail` 中写明理由，不要用括号前缀改写标题，也不要把复审总表写成一条伪 `finding` 节点。
+- 候选需要进入审计模式视图或归属目标时，连向 `goal`/`question`（用 `answers`、`related-to`、`refines` 或标签 `issue=<ID>`），不要只连向 `start` 或使用非标准关系 `responds-to`。
 - 已核实的 fact/observation/result 可用 `--status confirmed`，有利于恢复确认事实；这不隐式证明相关漏洞结论。
 - 游标是当前实际研究位置，不是“最重要漏洞”的书签。方向切换时显式移动到正在继续的问题；无需因为某结论严重而一直停在已收束节点。
 
@@ -58,7 +60,7 @@ pinwhy link "<候选ID>" "<目标ID>" --rel related-to --cwd "/已确认项目" 
 
 ## 反驳、取代与交接
 
-如果证据推翻候选，用证据 `contradicts` 候选并把候选状态设为 `refuted`。若新结论只是取代旧解释或范围，用新结论 `supersedes` 旧结论并把旧节点设为 `superseded`。两者不是同义关系，不用取代来掩盖被反驳的旧判断。
+如果证据推翻候选，用证据 `contradicts` 候选（勿写 `refutes`）并把候选状态设为 `refuted`；反证自身可标 `reproduced`，但不要把被反驳的候选本身标成 `reproduced`。若新结论只是取代旧解释或范围，用新结论 `supersedes` 旧结论并把旧节点设为 `superseded`。两者不是同义关系，不用取代来掩盖被反驳的旧判断。
 
 暂停、交接或完成一轮审计时可写检查点：
 

@@ -19,6 +19,8 @@ export const zhCN = {
   'audit.condition': "依赖条件",
   'audit.related': "相关检查与其他关系",
   'audit.unassigned': "未归属候选",
+  'audit.noIssueCandidates': "当前议题下暂无明确归属的候选。",
+  'audit.unassignedNotice': "另有 {count} 条未归属候选，可展开下方列表查看。",
   'audit.records': "全部记录 · 含自定义类型",
   'audit.empty': "尚无记录。可创建问题、候选或任意记录。",
   'audit.emptyHint': "安全审计台阅读明确记录的问题与候选。用 answers、related-to、refines 或 issue=<ID> 归属候选后，即可在此审阅论证。",

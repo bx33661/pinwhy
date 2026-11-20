@@ -330,3 +330,78 @@ test('capabilities advertise batch with its output schema and limits', () => {
   assert.ok(Number.isInteger(caps.limits.batchMaxBytes) && caps.limits.batchMaxBytes > 0);
   assert.ok(caps.commands.includes('batch'));
 });
+
+test('unprefixed references matching an earlier batch ref fail loudly with a $ref suggestion', (t) => {
+  const dir = seeded(t);
+  const cases = [
+    jsonl(
+      { op: 'node', ref: 'f1', type: 'finding', title: 'Candidate' },
+      { op: 'node', type: 'fact', title: 'Auto-assigned f1' },
+      { op: 'node', type: 'observation', title: 'Evidence', to: 'f1', rel: 'supports' },
+    ),
+    jsonl(
+      { op: 'node', ref: 'f1', type: 'finding', title: 'Candidate' },
+      { op: 'node', type: 'fact', title: 'Auto-assigned f1' },
+      { op: 'link', from: 'g1', to: 'f1', rel: 'related-to' },
+    ),
+    jsonl(
+      { op: 'node', ref: 'f1', type: 'finding', title: 'Candidate' },
+      { op: 'node', type: 'fact', title: 'Auto-assigned f1' },
+      { op: 'edit', id: 'f1', status: 'confirmed' },
+    ),
+  ];
+  for (const [index, input] of cases.entries()) {
+    const before = log(dir);
+    for (const mode of [['batch', '--request-id', `unprefixed-${index}`, '--json'], ['batch', '--check', '--json']]) {
+      const r = run(dir, mode, input);
+      assert.equal(r.status, 1, `${mode.join(' ')} case ${index}`);
+      assert.equal(r.stdout, '');
+      const err = JSON.parse(r.stderr);
+      assert.equal(err.code, 'invalid_batch');
+      assert.equal(err.line, 3);
+      assert.equal(err.suggestion, '$f1');
+      assert.deepEqual(log(dir), before);
+    }
+  }
+
+  const fixed = ok(dir, ['batch', '--request-id', 'prefixed-ok', '--json'], jsonl(
+    { op: 'node', ref: 'f1', type: 'finding', title: 'Candidate' },
+    { op: 'node', type: 'fact', title: 'Auto-assigned f1' },
+    { op: 'node', type: 'observation', title: 'Evidence', to: '$f1', rel: 'supports' },
+  ));
+  assert.equal(fixed.refs.f1, 'fd1');
+  assert.equal(fixed.results[2].edges[0].to, 'fd1');
+});
+
+test('compact batch receipts avoid 3x log duplication and preserve full receipt/crash recovery', (t) => {
+  const dir = seeded(t);
+  const detailA = 'alpha-payload-'.repeat(200);
+  const detailB = 'beta-payload-'.repeat(200);
+  const input = jsonl(
+    { op: 'node', ref: 'c', type: 'finding', title: 'Compact batch A', detail: detailA, to: 'g1' },
+    { op: 'node', type: 'observation', title: 'Compact batch B', detail: detailB, to: '$c', rel: 'supports' },
+    { op: 'edit', id: 'hy1', status: 'refuted' },
+  );
+  const first = ok(dir, ['batch', '--request-id', 'compact-wave', '--json'], input);
+  const eventsText = log(dir).toString('utf8');
+  assert.equal(eventsText.split(detailA).length - 1, 1, 'line-0 batch node detail is stored once');
+  assert.equal(eventsText.split(detailB).length - 1, 2, 'tail batch node detail is stored twice (not 3x)');
+
+  const receipt = ok(dir, ['receipt', 'compact-wave', '--json']);
+  assert.equal(receipt.schema, 'pinwhy.receipt.v1');
+  assert.equal(receipt.result.requestId, 'compact-wave');
+  assert.equal(Object.hasOwn(receipt.result.results[0].node, 'confidence'), false);
+  assert.deepEqual(ok(dir, ['batch', '--request-id', 'compact-wave', '--json'], input), first);
+
+  // Simulate crash after ev0 + ev1 (before tail events finish and before receipt marker).
+  const file = path.join(dir, '.pinwhy', 'events.jsonl');
+  const lines = fs.readFileSync(file, 'utf8').trimEnd().split('\n');
+  const firstIdx = lines.findIndex((line) => JSON.parse(line).request?.requestId === 'compact-wave');
+  fs.writeFileSync(file, `${lines.slice(0, firstIdx + 2).join('\n')}\n`);
+  fs.rmSync(path.join(dir, '.pinwhy', 'state.json'), { force: true });
+  assert.equal(ok(dir, ['receipt', 'compact-wave', '--json']).status, 'pending');
+  const recovered = ok(dir, ['batch', '--request-id', 'compact-wave', '--json'], input);
+  assert.deepEqual(recovered, first);
+  assert.equal(ok(dir, ['receipt', 'compact-wave', '--json']).status, 'committed');
+  assert.equal(replay(dir).nodes.hy1.status, 'refuted');
+});

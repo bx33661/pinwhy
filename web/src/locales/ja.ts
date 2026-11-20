@@ -20,6 +20,8 @@ export const ja: Messages = {
   'audit.condition': "依存条件",
   'audit.related': "関連する検証とその他の関係",
   'audit.unassigned': "未所属の候補",
+  'audit.noIssueCandidates': "この論点に明示的に所属する候補はありません。",
+  'audit.unassignedNotice': "下に未所属の候補が {count} 件あります。",
   'audit.records': "すべての記録 · カスタム型を含む",
   'audit.empty': "記録はありません。質問、候補、任意の記録を追加できます。",
   'audit.emptyHint': "セキュリティ監査シェルは明示された質問と候補を読みます。answers・related-to・refines または issue=<ID> で候補を所属させてから、ここで論証を確認します。",

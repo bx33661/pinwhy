@@ -20,6 +20,9 @@ const server = await createServer({
 after(() => server.close());
 const { Inspector } = await server.ssrLoadModule('/src/panels/Inspector.tsx');
 const { Sidebar } = await server.ssrLoadModule('/src/panels/Sidebar.tsx');
+const { AuditCatalog } = await server.ssrLoadModule('/src/workspace/shells/audit/AuditCatalog.tsx');
+const { AuditDossier } = await server.ssrLoadModule('/src/workspace/shells/audit/AuditDossier.tsx');
+const { buildAuditIndex, selectAudit } = await server.ssrLoadModule('/src/workspace/audit.ts');
 const render = (element) => renderToStaticMarkup(createElement(Tooltip.Provider, null, element));
 const escape = (value) => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#x27;');
 const node = {
@@ -93,5 +96,49 @@ test('Inspector highlights inline backtick code spans in detail without dropping
   assert.ok(html.includes('>code-node-1<'));
   assert.ok(html.includes('>GET /api/v2/admin/users</code>'));
   assert.ok(html.includes('succeeded and left an unmatched `tail.'));
+});
+
+test('AuditDossier landing and AuditCatalog expose unassigned candidates with explicit expansion controls', () => {
+  const snapshot = {
+    meta: {},
+    nodes: [
+      { id: 'g1', type: 'goal', title: 'Synthetic audit goal' },
+      { id: 'fd1', type: 'finding', title: 'Unassigned finding 1' },
+      { id: 'fd2', type: 'finding', title: 'Unassigned finding 2' },
+      { id: 'fd3', type: 'finding', title: 'Unassigned finding 3' },
+    ],
+    edges: [],
+  };
+  const index = buildAuditIndex(snapshot);
+  const landing = selectAudit(index, null, null);
+  const landingHtml = render(createElement(AuditDossier, {
+    audit: landing,
+    selected: null,
+    graphOpen: false,
+    onToggleGraph() {},
+    onSelect() {},
+    onIssue() {},
+    onCandidate() {},
+    onOpenArgument() {},
+    onExpand() {},
+  }));
+  assert.ok(landingHtml.includes('未归属候选 · 3'));
+  assert.ok(landingHtml.includes('未归属候选 · 显示更多'));
+
+  const emptyIssue = selectAudit(index, 'g1', null);
+  const catalogHtml = render(createElement(AuditCatalog, {
+    audit: emptyIssue,
+    selectedId: null,
+    onSelect() {},
+    onIssue() {},
+    onCandidate() {},
+    onCandidateIssue() {},
+    onOpenArgument() {},
+    onSearch() {},
+    onExpand() {},
+  }));
+  assert.ok(catalogHtml.includes('当前议题下暂无明确归属的候选'));
+  assert.ok(catalogHtml.includes('另有 3 条未归属候选'));
+  assert.ok(catalogHtml.includes('未归属候选 · 显示更多'));
 });
 

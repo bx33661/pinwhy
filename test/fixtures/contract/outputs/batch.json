@@ -140,122 +140,7 @@
             "requestId": "batch-1",
             "command": "batch",
             "fingerprint": "4fc9c10018c5d756b3a1ae778400b1f0c6ad6fba840e4eda914dbf0f79f1f281",
-            "result": {
-              "requestId": "batch-1",
-              "refs": {
-                "h": "hy1"
-              },
-              "counts": {
-                "nodes": 2,
-                "edges": 4,
-                "edits": 1
-              },
-              "results": [
-                {
-                  "line": 1,
-                  "op": "node",
-                  "ref": "h",
-                  "node": {
-                    "id": "hy1",
-                    "type": "hypothesis",
-                    "title": "Token reuse after logout",
-                    "ts": "<now>",
-                    "session": "<session-id>",
-                    "author": "agent:audit-a1",
-                    "status": "open",
-                    "confidence": "suspected"
-                  },
-                  "edges": [
-                    {
-                      "id": "hy1->g1:related-to",
-                      "from": "hy1",
-                      "to": "g1",
-                      "kind": "related-to",
-                      "ts": "<now>",
-                      "author": "agent:audit-a1"
-                    }
-                  ]
-                },
-                {
-                  "line": 2,
-                  "op": "node",
-                  "node": {
-                    "id": "o1",
-                    "type": "observation",
-                    "title": "Logout leaves the token valid",
-                    "ts": "<now>",
-                    "session": "<session-id>",
-                    "author": "agent:coordinator",
-                    "loc": {
-                      "path": "src/auth.js",
-                      "line": 51
-                    }
-                  },
-                  "edges": [
-                    {
-                      "id": "o1->hy1:supports",
-                      "from": "o1",
-                      "to": "hy1",
-                      "kind": "supports",
-                      "ts": "<now>",
-                      "author": "agent:coordinator"
-                    },
-                    {
-                      "id": "o1->f2:supports",
-                      "from": "o1",
-                      "to": "f2",
-                      "kind": "supports",
-                      "ts": "<now>",
-                      "author": "agent:coordinator"
-                    }
-                  ]
-                },
-                {
-                  "line": 3,
-                  "op": "link",
-                  "edge": {
-                    "id": "f2->hy1:related-to",
-                    "from": "f2",
-                    "to": "hy1",
-                    "kind": "related-to",
-                    "ts": "<now>",
-                    "author": "agent:coordinator",
-                    "label": "same session"
-                  }
-                },
-                {
-                  "line": 4,
-                  "op": "edit",
-                  "node": {
-                    "id": "f2",
-                    "type": "fact",
-                    "title": "Session cookie lacks SameSite",
-                    "ts": 1767225900000,
-                    "session": "session_FIXTURE",
-                    "author": "agent:primary",
-                    "confidence": "reproduced",
-                    "updated": "<now>",
-                    "updatedBy": "agent:audit-a2"
-                  }
-                }
-              ]
-            },
-            "events": [
-              {
-                "eventVersion": 1,
-                "eventId": "<event-id>",
-                "op": "node",
-                "node": {
-                  "id": "hy1",
-                  "type": "hypothesis",
-                  "title": "Token reuse after logout",
-                  "ts": "<now>",
-                  "session": "<session-id>",
-                  "author": "agent:audit-a1",
-                  "status": "open",
-                  "confidence": "suspected"
-                }
-              },
+            "tailEvents": [
               {
                 "eventVersion": 1,
                 "eventId": "<event-id>",
@@ -338,7 +223,57 @@
                 }
               }
             ],
-            "at": "<now>"
+            "at": "<now>",
+            "batchPlan": {
+              "refs": {
+                "h": "hy1"
+              },
+              "counts": {
+                "nodes": 2,
+                "edges": 4,
+                "edits": 1
+              },
+              "entries": [
+                {
+                  "line": 1,
+                  "op": "node",
+                  "ref": "h",
+                  "eventId": "<event-id>",
+                  "edgeEventIds": [
+                    "<event-id>"
+                  ]
+                },
+                {
+                  "line": 2,
+                  "op": "node",
+                  "eventId": "<event-id>",
+                  "edgeEventIds": [
+                    "<event-id>",
+                    "<event-id>"
+                  ]
+                },
+                {
+                  "line": 3,
+                  "op": "link",
+                  "eventId": "<event-id>"
+                },
+                {
+                  "line": 4,
+                  "op": "edit",
+                  "node": {
+                    "id": "f2",
+                    "type": "fact",
+                    "title": "Session cookie lacks SameSite",
+                    "ts": 1767225900000,
+                    "session": "session_FIXTURE",
+                    "author": "agent:primary",
+                    "confidence": "reproduced",
+                    "updated": "<now>",
+                    "updatedBy": "agent:audit-a2"
+                  }
+                }
+              ]
+            }
           }
         },
         {

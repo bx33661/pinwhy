@@ -127,6 +127,24 @@ export function AuditCatalog({
       </label>
       {controls(audit.catalog.members, t('audit.candidates'))}
       <div className="space-y-1">{audit.catalog.members.items.map(record)}</div>
+      {audit.issue && audit.catalog.members.total === 0 && (
+        <div role="status" className="space-y-1.5 rounded-md border border-dashed px-2.5 py-2 text-[11px] leading-5 text-muted-foreground">
+          <p className="m-0">{t('audit.noIssueCandidates')}</p>
+          {audit.catalog.unassigned.total > 0 && (
+            <p className="m-0">{t('audit.unassignedNotice', { count: audit.catalog.unassigned.total })}</p>
+          )}
+          {audit.catalog.unassigned.total > 0 && !audit.catalog.unassigned.open && (
+            <Button
+              size="sm"
+              variant="outline"
+              aria-label={`${t('audit.unassigned')} · ${t('audit.showMore')}`}
+              onClick={() => onExpand('unassigned', 'more', 0)}
+            >
+              {t('audit.showMore')}
+            </Button>
+          )}
+        </div>
+      )}
       {audit.outsideIssue && (
         <div role="status" className="rounded-md border p-2 text-xs">
           <p className="m-0 mb-1 font-medium">{t('audit.outsideIssue')}</p>

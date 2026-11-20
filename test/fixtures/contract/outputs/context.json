@@ -953,41 +953,36 @@
             "at": 1767227040000
           }
         ],
-        "neighborhood": [
+        "neighborhood": [],
+        "openThreads": [
           {
-            "depth": 1,
-            "direction": "out",
-            "relation": "depends-on",
-            "node": {
-              "id": "f2",
-              "type": "fact",
-              "title": "Session cookie lacks SameSite",
-              "status": null,
-              "severity": null,
-              "confidence": "static-confirmed",
-              "author": "agent:primary",
-              "at": 1767225900000
-            }
-          },
-          {
-            "depth": 1,
-            "direction": "in",
-            "relation": "related-to",
-            "node": {
-              "id": "h1",
-              "type": "hint",
-              "title": "Check whether logout rotates the id",
-              "status": null,
-              "severity": null,
-              "confidence": null,
-              "author": "agent:primary",
-              "at": 1767226020000
-            }
+            "id": "q1",
+            "type": "question",
+            "title": "Does SSO share the same handler?",
+            "status": "open",
+            "severity": null,
+            "confidence": null,
+            "tags": [
+              "sso"
+            ],
+            "author": "agent:primary",
+            "updatedBy": "agent:primary",
+            "at": 1767226560000
           }
         ],
-        "openThreads": [],
         "findings": [],
-        "confirmedFacts": [],
+        "confirmedFacts": [
+          {
+            "id": "f2",
+            "type": "fact",
+            "title": "Session cookie lacks SameSite",
+            "status": null,
+            "severity": null,
+            "confidence": "static-confirmed",
+            "author": "agent:primary",
+            "at": 1767225900000
+          }
+        ],
         "retiredNodes": [],
         "notes": [],
         "otherNodes": [],
@@ -1005,25 +1000,31 @@
         "recentActivity": [],
         "relations": [
           {
-            "id": "h1->v1:related-to",
-            "from": "h1",
-            "to": "v1",
+            "id": "v1->f2:depends-on",
+            "from": "v1",
+            "to": "f2",
+            "kind": "depends-on",
+            "label": null
+          },
+          {
+            "id": "f2->g1:related-to",
+            "from": "f2",
+            "to": "g1",
             "kind": "related-to",
             "label": null
           }
         ],
         "omitted": {
-          "confirmedFacts": 2,
+          "neighborhood": 3,
           "otherNodes": 2,
-          "relations": 6,
-          "neighborhood": 1,
-          "openThreads": 1,
+          "relations": 5,
           "findings": 1,
+          "confirmedFacts": 1,
           "notes": 1,
           "recentActivity": 1
         },
         "truncated": true,
-        "estimatedTokens": 598
+        "estimatedTokens": 595
       }
     },
     {

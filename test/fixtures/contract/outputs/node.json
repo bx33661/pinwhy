@@ -645,34 +645,7 @@
             "requestId": "req-new-1",
             "command": "addNode",
             "fingerprint": "780b422045ee444bec0d537bf2727950ed1319189bfdac7cf7ef7fc272eeea5e",
-            "result": {
-              "node": {
-                "id": "f5",
-                "type": "fact",
-                "title": "x",
-                "ts": "<now>",
-                "session": "<session-id>",
-                "author": "agent:primary"
-              },
-              "edge": null,
-              "edges": [],
-              "cursor": null
-            },
-            "events": [
-              {
-                "eventVersion": 1,
-                "eventId": "<event-id>",
-                "op": "node",
-                "node": {
-                  "id": "f5",
-                  "type": "fact",
-                  "title": "x",
-                  "ts": "<now>",
-                  "session": "<session-id>",
-                  "author": "agent:primary"
-                }
-              }
-            ],
+            "tailEvents": [],
             "at": "<now>"
           }
         },

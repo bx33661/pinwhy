@@ -20,6 +20,8 @@ export const zhHK: Messages = {
   'audit.condition': "依賴條件",
   'audit.related': "相關檢查與其他關係",
   'audit.unassigned': "未歸屬候選",
+  'audit.noIssueCandidates': "目前議題下暫無明確歸屬的候選。",
+  'audit.unassignedNotice': "另有 {count} 條未歸屬候選，可展開下方列表查看。",
   'audit.records': "全部記錄 · 含自訂類型",
   'audit.empty': "尚無記錄。可建立問題、候選或任意記錄。",
   'audit.emptyHint': "安全審計台閱讀明確記錄的問題與候選。用 answers、related-to、refines 或 issue=<ID> 歸屬候選後，即可在此審閱論證。",

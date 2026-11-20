@@ -21,6 +21,8 @@ export const en: Messages = {
   'audit.condition': "Required conditions",
   'audit.related': "Related checks and other relations",
   'audit.unassigned': "Unassigned candidates",
+  'audit.noIssueCandidates': "No candidates are explicitly assigned to this issue.",
+  'audit.unassignedNotice': "{count} unassigned candidates exist below.",
   'audit.records': "All records · including custom types",
   'audit.empty': "No records yet. Add a question, a candidate, or any record.",
   'audit.emptyHint': "The security audit shell reads authored questions and candidates. Link candidates with answers, related-to, refines, or an issue=<ID> tag, then review the argument here.",

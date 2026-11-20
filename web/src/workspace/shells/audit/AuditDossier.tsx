@@ -280,6 +280,7 @@ export function AuditDossier({
           {audit.unassigned.length > 0 && (
             <section aria-label={t('audit.unassigned')}>
               <h3 className="m-0 mb-2 text-xs font-semibold">{t('audit.unassigned')} · {audit.unassigned.length}</h3>
+              {controls(audit.catalog.unassigned, t('audit.unassigned'), 0)}
               <div className="grid gap-2">{audit.catalog.unassigned.items.map(overviewCard)}</div>
             </section>
           )}

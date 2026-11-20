@@ -8,7 +8,9 @@
 
 阈值管的是“记什么”，不是“什么时候记”：达到阈值的判断在形成时就写，不等结论稳定或任务收尾。磁盘上的日志和台账不替代节点，下一个会话只从黑板恢复。
 
-一个节点只表达一个主要判断。标题只写这个判断，控制在约 80 字内，`lint` 的 `long-titles` 以此为界；证据、文件位置、条件和过程放 `--detail`。标题不复述其他节点的结论，例如不写“hy1 被反驳”：反驳用 `contradicts` 边和 `refuted` 状态表达，否则读者只看标题就以为关系可有可无。节点类型和关系可自定义，不构成状态机。创建节点默认不连边、不移动游标；`--enter` 才显式进入，`--relate-here` 才与当前位置建立默认弱关系 `related-to`，不能借此暗示已经证明的来源。已知新节点与已有节点的关系时，可用 `--to "<已有ID>" --rel <关系>` 在创建时一并声明，读作“新节点 关系 已有节点”；省略 `--rel` 只得到弱关系 `related-to`。`--to` 可重复，同一关系连向多个已有节点（`features.nodeMultiTarget`）；它不移动游标，也不与 `--parent`/`--relate-here` 同用。关系不同的连边用 `link`。
+一个节点只表达一个主要判断。标题只写这个判断，控制在约 80 字内，`lint` 的 `long-titles` 以此为界；证据、文件位置、条件和过程放 `--detail`。标题不复述其他节点的结论（例如不写“hy1 被反驳”或`（已证伪）`、`（设计/加固）`等括号前缀）：状态用 `--status`，分类用 `--tag`，关系用边表达，否则读者只看标题就以为关系与状态维度可有可无。节点类型和关系可自定义，不构成状态机；不过使用标准关系名（如 `contradicts` 而非 `refutes`、`answers` 而非 `responds-to`）能让 `lint` 与审计模式直接识别。创建节点默认不连边、不移动游标；`--enter` 才显式进入，`--relate-here` 才与当前位置建立默认弱关系 `related-to`，不能借此暗示已经证明的来源。已知新节点与已有节点的关系时，可用 `--to "<已有ID>" --rel <关系>` 在创建时一并声明，读作“新节点 关系 已有节点”；省略 `--rel` 只得到弱关系 `related-to`。`--to` 可重复，同一关系连向多个已有节点（`features.nodeMultiTarget`）；它不移动游标，也不与 `--parent`/`--relate-here` 同用。关系不同的连边用 `link`。
+
+特别注意证据方向：若先有观察/事实，再新建 `finding`/`hypothesis` 时顺便用 `--to` 连向已有证据，新节点在关系左侧，必须用 `--rel derived-from`（结论 `derived-from` 证据），**不要写 `--rel supports`**（那会变成“结论支持证据”，导致 `lint` 仍认为该结论缺少证据）；用 `link "<证据ID>" "<结论ID>" --rel supports` 同样可保持正确方向。
 
 ```sh
 pinwhy node add hypothesis "边界条件可能导致错误" --confidence suspected --detail "已知条件与待核对部分" --cwd "/已确认项目" --no-init
@@ -70,7 +72,9 @@ pinwhy node add finding "候选结论" --confidence suspected --detail "待核�
 pinwhy edit "<候选ID>" --confidence static-confirmed --detail "已核对的源码位置、成立条件与尚未执行的验证" --cwd "/已确认项目" --no-init
 ```
 
-最后一条只在确实完成静态核对后执行。真实复现后才把该候选更新为 `--confidence reproduced`，并补充真实环境、输入与观测结果。`edit --detail` 会替换详情，应保留仍有价值的旧条件与证据。已核实的 fact/observation/result 可标记 `--status confirmed`，但这不会自动提升其他节点可信度。
+最后一条只在确实完成静态核对后执行。真实复现后才把该候选更新为 `--confidence reproduced`，并补充真实环境、输入与观测结果。`edit --detail` 会替换详情，应保留仍有价值的旧条件与证据。已核实的 fact/observation/result 可标记 `--status confirmed`，但这不会自动提升其他节点可信度。同理，当反证已经复现并推翻某候选时，只给**反证节点**标 `reproduced` 并把旧候选设为 `--status refuted`，不要把被推翻的旧候选本身标成 `reproduced`。
+
+提示：`config.json` 中的 `redact: true` 仅作用于可选的工具活动层（Hook 采集），不会自动脱敏逻辑节点、`events.jsonl` 或导出产物；导出分享前需自行核对敏感原文。
 
 需要撤回字段值时，先确认 `capabilities.features.editClear`，再显式使用 `edit <ID> --clear detail --clear tags --clear confidence`（同样传 `--cwd` / `--no-init`）。允许的完整字段名为 detail、tags、status、severity、confidence；详情清为空字符串、标签清为空数组、三个维度清为 null。省略字段不改，同一字段不能同时赋值和清空，标题不可清空。batch 的 edit 用相应空字符串、空数组或 null，清空仍保留事件历史。
 
