@@ -1,5 +1,5 @@
 import { useState, type RefObject } from 'react';
-import { Check, ChevronDown, FileText, Focus, GitBranch, History, ListTree, Moon, MoreHorizontal, PanelLeft, Plus, Search, Sun, Users } from 'lucide-react';
+import { Check, ChevronDown, FileText, Focus, GitBranch, History, ListTree, Moon, MoreHorizontal, PanelLeft, Plus, Search, Settings2, Sun, Users } from 'lucide-react';
 import { Select } from 'radix-ui';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -36,9 +36,11 @@ type Props = {
   digestRef: RefObject<HTMLButtonElement | null>;
   activities: Activity[];
   activityTotal: number;
+  showEmptyActivity?: boolean;
   timelineOpen: boolean;
   /** Absent where there is no server to replay the log (offline HTML). */
   onTimeline?: () => void;
+  onSettings?: () => void;
   /**
    * A host page frames the board: one compact row, no product chrome (about, version, appearance —
    * the host owns those), and the remaining controls grouped so none of them become unreachable.
@@ -66,8 +68,9 @@ function ViewSwitcher({ mode, onMode }: { mode: ViewMode; onMode: (mode: ViewMod
 const MENU_ROW = 'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-foreground outline-none transition-colors hover:bg-accent focus-visible:bg-accent';
 
 export function Topbar(props: Props) {
-  const { title, build, workspace, onWorkspace, mode, onMode, agentId, agentIds, onAgent, theme, onTheme, connection, isStatic, sidebarOpen, onToggleSidebar, onSearch, onDigest, onNew, digestRef, activities, activityTotal, timelineOpen, onTimeline, compact } = props;
+  const { title, build, workspace, onWorkspace, mode, onMode, agentId, agentIds, onAgent, theme, onTheme, connection, isStatic, sidebarOpen, onToggleSidebar, onSearch, onDigest, onNew, digestRef, activities, activityTotal, showEmptyActivity = false, timelineOpen, onTimeline, onSettings, compact } = props;
   const status = isStatic ? { label: t('topbar.static'), dot: 'bg-strong' } : CONNECTION[connection];
+  const showActivity = activityTotal > 0 || activities.length > 0 || showEmptyActivity;
   const [menuOpen, setMenuOpen] = useState(false);
 
   if (compact) {
@@ -85,7 +88,7 @@ export function Topbar(props: Props) {
         <div className="flex shrink-0 items-center gap-0.5">
           <IconButton label={t('topbar.search')} onClick={onSearch}><Search /></IconButton>
           {workspace === 'general' && <ViewSwitcher mode={mode} onMode={onMode} />}
-          <ActivityPopover activities={activities} total={activityTotal} />
+          {showActivity && <ActivityPopover activities={activities} total={activityTotal} />}
           <Popover open={menuOpen} onOpenChange={setMenuOpen}>
             <PopoverTrigger asChild ref={digestRef}>
               <Button size="icon-sm" aria-label={t('palette.commands')} title={t('palette.commands')} aria-haspopup="menu" data-compact-menu><MoreHorizontal /></Button>
@@ -122,6 +125,11 @@ export function Topbar(props: Props) {
               {onNew && (
                 <button type="button" className={MENU_ROW} onClick={() => { setMenuOpen(false); onNew(); }}>
                   <Plus className="size-3.5 shrink-0" /><span className="flex-1 text-left">{t('topbar.new')}</span>
+                </button>
+              )}
+              {onSettings && (
+                <button type="button" className={MENU_ROW} onClick={() => { setMenuOpen(false); onSettings(); }}>
+                  <Settings2 className="size-3.5 shrink-0" /><span className="flex-1 text-left">{t('settings.open')}</span>
                 </button>
               )}
             </PopoverContent>
@@ -171,7 +179,7 @@ export function Topbar(props: Props) {
         {agentIds.length > 1 && (
           <Select.Root value={agentId} onValueChange={onAgent}>
             <Select.Trigger asChild aria-label={t('topbar.agent')} title={`${t('topbar.agentHint')}\n${agentId}`}>
-              <Button size="sm" className="h-8 min-w-0 max-w-40 rounded-lg bg-secondary px-2.5 text-xs">
+              <Button variant="outline" size="sm" className="h-8 min-w-0 max-w-40 rounded-lg px-2.5 text-xs">
                 <Users className="size-3.5" />
                 <span className="min-w-0 truncate"><Select.Value /></span>
                 <Select.Icon asChild><ChevronDown className="size-3 text-muted-foreground" /></Select.Icon>
@@ -200,14 +208,21 @@ export function Topbar(props: Props) {
         <span role="status" title={status.label} className="mr-1 flex items-center gap-1.5 text-xs text-muted-foreground">
           <i className={cn('size-1.5 rounded-full', status.dot)} /><span className="max-xl:sr-only">{status.label}</span>
         </span>
-        <Button size="sm" variant="ghost" className="max-md:hidden bg-secondary/60 text-subtle hover:bg-secondary hover:text-foreground" onClick={onSearch} aria-label={t('topbar.searchCommands')}>
+        <Button
+          size="sm"
+          variant="ghost"
+          className={cn('max-md:hidden bg-secondary/60 text-subtle hover:bg-secondary hover:text-foreground', sidebarOpen && 'lg:hidden')}
+          onClick={onSearch}
+          aria-label={t('topbar.searchCommands')}
+        >
           <Search className="size-3.5" /><Kbd>⌘K</Kbd>
         </Button>
         <IconButton label={t('topbar.search')} className="md:hidden" onClick={onSearch}><Search /></IconButton>
-        <ActivityPopover activities={activities} total={activityTotal} />
+        {showActivity && <ActivityPopover activities={activities} total={activityTotal} />}
         {onTimeline && <IconButton label={timelineOpen ? t('timeline.close') : t('timeline.open')} aria-pressed={timelineOpen} onClick={onTimeline}><History /></IconButton>}
         {onNew && <Button size="sm" variant="default" className="shadow-xs" onClick={onNew} aria-label={t('topbar.newNode')}><Plus className="size-3.5" /><span className="max-sm:hidden">{t('topbar.new')}</span></Button>}
         <Button ref={digestRef} size="sm" variant="ghost" className="text-subtle hover:text-foreground" onClick={onDigest} aria-label={t('topbar.digestLabel')}><FileText className="size-3.5" /><span className="max-sm:hidden">{t('topbar.digest')}</span></Button>
+        {onSettings && <IconButton label={t('settings.open')} shortcut="⌘," onClick={onSettings}><Settings2 /></IconButton>}
         <IconButton label={theme === 'light' ? t('theme.toDark') : t('theme.toLight')} onClick={(event) => onTheme({ x: event.clientX, y: event.clientY })}>{theme === 'light' ? <Moon /> : <Sun />}</IconButton>
       </div>
     </header>

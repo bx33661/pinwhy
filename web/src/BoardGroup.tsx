@@ -1,11 +1,14 @@
 import { memo } from 'react';
 import { useStore, type NodeProps } from '@xyflow/react';
 import { GroupNode } from './components/react-flow/labeled-group-node';
+import { useIsExporting } from './export-context';
 import type { CanvasNode } from './graph';
 
 export const BoardGroup = memo(function BoardGroup({ data }: NodeProps<CanvasNode>) {
-  // Keep the frame label legible when the board is zoomed far out.
-  const scale = useStore((state) => Math.min(1.65, Math.max(1, 0.82 / state.transform[2])));
+  const exporting = useIsExporting();
+  // Keep the frame label legible when the board is zoomed far out, while exporting at crisp 1x scale.
+  const liveScale = useStore((state) => Math.min(1.65, Math.max(1, 0.82 / state.transform[2])));
+  const scale = exporting ? 1 : liveScale;
   return (
     <GroupNode
       position="top-left"

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useEdgesState, useNodesState, useUpdateNodeInternals } from '@xyflow/react';
 import { layoutGraph, type CanvasEdge, type CanvasNode, type Positions } from '../graph';
 import type { ViewMode } from '../types';
+import { isMotionReduced } from '../view-transition';
 import { layoutAudit } from './audit-layout';
 
 export type WorkspaceProjection = { nodes: CanvasNode[]; edges: CanvasEdge[]; audit?: boolean };
@@ -60,14 +61,11 @@ export function useWorkspaceLayout(projection: WorkspaceProjection | null, mode:
     const viewKey = `${projection.audit ? 'audit' : 'general'}:${mode}:${direction}`;
     const slow = window.setTimeout(() => setLaying(projection.nodes.length), 300);
     const layout = projection.audit
-      ? Promise.resolve({
-          nodes: layoutAudit(projection.nodes, projection.edges).nodes,
-          edges: projection.edges.map((edge) => ({ ...edge, data: { ...edge.data, route: undefined } })),
-        })
+      ? Promise.resolve(layoutAudit(projection.nodes, projection.edges, direction))
       : layoutGraph(projection.nodes, projection.edges, direction, mode === 'all', overviewColumns, lastPositions.current.get(viewKey));
     layout.then((layouted) => {
       if (cancelled) return;
-      const allowMotion = hasMounted.current && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const allowMotion = hasMounted.current && !isMotionReduced();
       let enterCount = 0;
       const nextNodes = allowMotion
         ? layouted.nodes.map((node) => (!node.data.group && !knownIds.current.has(node.id)

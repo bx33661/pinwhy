@@ -9,6 +9,8 @@ export type BoardNode = {
   confidence?: string | null;
   ts?: number;
   updated?: number;
+  author?: string | null;
+  updatedBy?: string | null;
   session?: string;
   [key: string]: unknown;
 };
@@ -19,6 +21,7 @@ export type BoardEdge = {
   to: string;
   kind: string;
   label?: string;
+  author?: string | null;
   inputTruncation?: Record<string, { originalLength: number; storedLength: number }> | null;
   ts?: number;
 };

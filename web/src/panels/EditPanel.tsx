@@ -219,15 +219,15 @@ function StandaloneNodeForm({ onDone }: { onDone: () => void }) {
 export function NewNodeDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[440px]">
-        <header className="flex items-start justify-between gap-4 border-b px-5 py-4">
+      <DialogContent className="flex max-h-[calc(100dvh-32px)] max-w-[440px] flex-col overflow-hidden p-0">
+        <header className="flex shrink-0 items-start justify-between gap-4 border-b px-5 py-4">
           <div>
             <DialogTitle className="m-0 text-[15px] font-semibold">{t('edit.newDialog')}</DialogTitle>
             <DialogDescription className="m-0 mt-0.5 text-xs text-muted-foreground">{t('edit.newDescription')}</DialogDescription>
           </div>
           <DialogClose asChild><Button size="icon-sm" aria-label={t('common.close')}><X /></Button></DialogClose>
         </header>
-        <div className="px-5 py-4"><StandaloneNodeForm onDone={() => onOpenChange(false)} /></div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4"><StandaloneNodeForm onDone={() => onOpenChange(false)} /></div>
       </DialogContent>
     </Dialog>
   );

@@ -11,6 +11,7 @@ function buildGroups(): { title: string; items: { keys: string[]; label: string 
       items: [
         { keys: ['⌘ K', '/'], label: t('shortcuts.search') },
         { keys: ['['], label: t('shortcuts.sidebar') },
+        { keys: ['⌘ ,'], label: t('shortcuts.settings') },
         { keys: ['?'], label: t('shortcuts.help') },
         { keys: ['Esc'], label: t('shortcuts.escape') },
       ],
@@ -28,6 +29,13 @@ function buildGroups(): { title: string; items: { keys: string[]; label: string 
         { keys: [t('shortcuts.wheel'), t('shortcuts.drag')], label: t('shortcuts.zoomPan') },
       ],
     },
+    {
+      title: t('shortcuts.audit'),
+      items: [
+        { keys: ['J', 'K'], label: t('shortcuts.auditCandidate') },
+        { keys: ['G'], label: t('shortcuts.auditSurface') },
+      ],
+    },
   ];
 }
 
@@ -35,15 +43,15 @@ export function ShortcutsDialog({ open, onOpenChange }: { open: boolean; onOpenC
   const groups = buildGroups();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[420px]">
-        <header className="flex items-start justify-between gap-4 border-b px-5 py-4">
+      <DialogContent className="flex max-h-[calc(100dvh-32px)] max-w-[420px] flex-col overflow-hidden p-0">
+        <header className="flex shrink-0 items-start justify-between gap-4 border-b px-5 py-4">
           <div>
             <DialogTitle className="m-0 text-[15px] font-semibold">{t('shortcuts.title')}</DialogTitle>
             <DialogDescription className="m-0 mt-0.5 text-xs text-muted-foreground">{t('shortcuts.hint')}</DialogDescription>
           </div>
           <DialogClose asChild><Button size="icon-sm" aria-label={t('shortcuts.close')}><X /></Button></DialogClose>
         </header>
-        <div className="flex flex-col gap-5 px-5 py-4">
+        <div className="min-h-0 flex-1 flex flex-col gap-5 overflow-y-auto px-5 py-4">
           {groups.map((group) => (
             <section key={group.title}>
               <h3 className="m-0 mb-2 text-xs font-medium text-muted-foreground">{group.title}</h3>

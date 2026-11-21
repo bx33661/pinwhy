@@ -57,7 +57,7 @@ async function launchBrowser(extraArgs = []) {
 }
 
 async function viewerContext(instance = browser) {
-  const context = await instance.newContext({ locale: 'zh-CN', viewport: { width: 1360, height: 960 } });
+  const context = await instance.newContext({ locale: 'zh-CN', viewport: { width: 1360, height: 960 }, acceptDownloads: true });
   context.setDefaultTimeout(15000);
   context.setDefaultNavigationTimeout(30000);
   await context.addInitScript(() => localStorage.setItem('pinwhy-pref-locale', JSON.stringify('zh-CN')));
@@ -531,8 +531,30 @@ async function verify() {
   await offlinePage.getByRole('button', { name: '现场摘要', exact: true }).click();
   assert.ok((await offlinePage.getByRole('region', { name: '交接后变化' }).innerText()).includes('离线快照不包含事件历史'));
   await screenshot(offlinePage, 'offline-readonly.png');
+  await offlinePage.keyboard.press('Escape');
+  await offlinePage.keyboard.press('Escape');
+  const exportFitDl = offlinePage.waitForEvent('download');
+  await offlinePage.getByRole('button', { name: '导出为图片', exact: true }).click();
+  const fitPngPath = path.join(output, 'export-fit.png');
+  await (await exportFitDl).saveAs(fitPngPath);
+  artifacts.push('export-fit.png');
+  for (let i = 0; i < 6; i++) await offlinePage.getByRole('button', { name: '放大', exact: true }).click();
+  await offlinePage.mouse.move(24, 120);
+  await offlinePage.mouse.down();
+  await offlinePage.mouse.move(1280, 860, { steps: 8 });
+  await offlinePage.mouse.up();
+  const exportPannedDl = offlinePage.waitForEvent('download');
+  await offlinePage.getByRole('button', { name: '导出为图片', exact: true }).click();
+  const pannedPngPath = path.join(output, 'export-panned.png');
+  await (await exportPannedDl).saveAs(pannedPngPath);
+  artifacts.push('export-panned.png');
+  const fitBuf = fs.readFileSync(fitPngPath);
+  const panBuf = fs.readFileSync(pannedPngPath);
+  assert.equal(fitBuf.readUInt32BE(16), panBuf.readUInt32BE(16), 'panned/zoomed PNG export preserves full board width');
+  assert.equal(fitBuf.readUInt32BE(20), panBuf.readUInt32BE(20), 'panned/zoomed PNG export preserves full board height');
+  assert.ok(panBuf.length > 10000, 'exported PNG is non-empty');
   assert.deepEqual(offlineApi, []); assert.equal(hash(), beforeReadOnly);
-  ok('offline export explicitly reports unavailable history and makes zero API/SSE requests or edits');
+  ok('offline export explicitly reports unavailable history, exports complete PNG when zoomed/panned, and makes zero API/SSE requests');
   assert.deepEqual(pageErrors, []);
   assert.equal(allWrites.length, writesBeforeReadOnly);
 

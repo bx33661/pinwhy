@@ -94,6 +94,17 @@ try {
   await page.screenshot({ path: path.join(output, 'evidence-challenge.png'), fullPage: true }); artifacts.push('evidence-challenge.png');
   ok('evidence rebuttals stay local, retain their explanation and never become root counterevidence');
 
+  await page.getByRole('radio', { name: '论证图', exact: true }).click();
+  await page.locator('.react-flow__node').first().waitFor();
+  assert.equal(await dossier.count(), 0, 'blueprint takes the full stage instead of splitting height');
+  await page.screenshot({ path: path.join(output, 'audit-blueprint.png'), fullPage: true }); artifacts.push('audit-blueprint.png');
+  await page.getByRole('radio', { name: '卷宗', exact: true }).click();
+  await dossier.waitFor();
+  await dossier.getByRole('button', { name: '共享于 fd10', exact: true }).click();
+  assert.equal(new URL(page.url()).searchParams.get('candidate'), 'fd10');
+  assert.equal(hash(), initialHash);
+  ok('blueprint switch and shared prerequisite pivot preserve read-only projection');
+
   await page.goto(`${url}/?workspace=audit&issue=q0&candidate=fd0&node=f64`);
   await inspector.getByRole('heading', { name: 'Synthetic evidence 64', exact: true }).waitFor();
   await dossier.getByRole('button', { name: 'Synthetic evidence 64 · f64', exact: true }).waitFor();

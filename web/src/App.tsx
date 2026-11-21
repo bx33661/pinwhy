@@ -16,6 +16,7 @@ import { CommandPalette } from './panels/CommandPalette';
 import { DigestDialog } from './panels/DigestDialog';
 import { EmptyBoard } from './panels/EmptyBoard';
 import { Legend } from './panels/Legend';
+import { SettingsDialog } from './panels/SettingsDialog';
 import { ShortcutsDialog } from './panels/ShortcutsDialog';
 import { Inspector } from './panels/Inspector';
 import { NewNodeDialog } from './panels/EditPanel';
@@ -36,13 +37,13 @@ import { useWorkspaceTimeline } from './workspace/use-workspace-timeline';
 import { useWorkspaceChrome, useWorkspaceShortcuts } from './workspace/use-workspace-chrome';
 import { useEmbedHost } from './workspace/use-embed-host';
 import { WorkspaceBanners } from './workspace/WorkspaceBanners';
-import { AuditCatalog, AuditDossier } from './workspace/shells/audit';
-import { AuditSplitDivider, clampAuditSplit } from './workspace/shells/audit/AuditSplitDivider';
+import { AuditBlueprintBar, AuditCatalog, AuditDossier } from './workspace/shells/audit';
 import { isAuditIssue } from './workspace/audit';
+import { useSceneOcclusion } from './scene3d/use-scene-occlusion';
 import type { BoardNode } from './types';
 import type { Scene3DProps } from './scene3d/shared';
 import { readPresentation } from './embedded';
-import { usePref } from './use-pref';
+import { ExportingContext } from './export-context';
 import { runViewTransition } from './view-transition';
 
 const nodeTypes = { security: SecurityNode, boardGroup: BoardGroup };
@@ -67,35 +68,41 @@ function Workspace() {
   const {
     theme, setTheme, cardTheme, setCardTheme, direction, setDirection, sidebarOpen, setSidebarOpen, closeSidebar,
     showMap, setShowMap, showLegend, setShowLegend, edgeStyle, setEdgeStyle, follow, setFollow,
-    showChanges, setShowChanges, paletteOpen, setPaletteOpen, digestOpen, setDigestOpen,
-    newOpen, setNewOpen, shortcutsOpen, setShortcutsOpen, setFonts: setHostFonts,
+    showChanges, setShowChanges, motionMode, setMotionMode, showCardLoc, setShowCardLoc,
+    showPeekHud, setShowPeekHud, showZoomSlider, setShowZoomSlider,
+    auditProvenanceMode, setAuditProvenanceMode, showEmptyActivity, setShowEmptyActivity, resetPreferences,
+    paletteOpen, setPaletteOpen, digestOpen, setDigestOpen,
+    newOpen, setNewOpen, shortcutsOpen, setShortcutsOpen, settingsOpen, setSettingsOpen, setFonts: setHostFonts,
   } = useWorkspaceChrome({ embedded: presentation.embedded, appearance: presentation.appearance, fonts: presentation.fonts });
   const [filter, setFilter] = useState<NodeFilter>(EMPTY_FILTER);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
-  const [canvasZoom, setCanvasZoom] = useState(1);
-  const [auditGraphOpen, setAuditGraphOpen] = usePref('audit-graph', false);
-  const [auditSplit, setAuditSplit] = usePref('audit-split', 54);
+  const [farZoom, setFarZoom] = useState(false);
+  const lastZoomRef = useRef(1);
+  const [auditGraphOpen, setAuditGraphOpen] = useState(false);
   const digestTrigger = useRef<HTMLButtonElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const flatRef = useRef<HTMLDivElement>(null);
   const inspectorRef = useRef<HTMLElement>(null);
 
   const auditMode = workspace === 'audit';
-  const showAuditGraph = auditMode && auditGraphOpen;
   const canvasMode = auditMode ? 'logic' : mode;
   const { board, agent, audit, expandAudit, projection, results, legend } = useWorkspaceData(snapshot, mode, agentId, filter, auditMode ? { issueId, candidateId, selectedId: selectedId ?? deepLink.current } : undefined);
+  const canShowAuditGraph = Boolean(audit && (audit.root || selectedId || audit.records.length === 1));
+  const showAuditGraph = auditMode && auditGraphOpen && canShowAuditGraph;
   const { allNodes, allEdges, activities, byId, inbox, paletteNodes, filterOptions, counts } = board;
   const { agentIds, digest, currentId, current, findings, openItems } = agent;
   // Stepping through checkpoints is not the Agent writing: only the live board pulses.
   const { fresh, notice, flash, linkCopied, copyNodeLink, copied, copyDigest, offlineShown } = useWorkspaceFeedback(timeline.active ? null : snapshot, allNodes, digest, agentId, connection, isStatic);
   const { nodes, edges, onNodesChange, layoutRevision, layoutMode, laying, layoutTransition } = useWorkspaceLayout(projection, canvasMode, direction);
-  const { centerOnNode, fitCanvas, focusNeighborhood, motion } = useWorkspaceViewport({ viewportRef, pendingFocus, layoutRevision, mode: canvasMode, follow: follow && !auditMode, currentId, selectedId });
-  const { scene3d, sceneRef, openScene, closeScene, occlusion, exporting, exportImage } = useWorkspaceScene({ viewportRef, flatRef, inspectorRef, selectedId, mode: canvasMode, flash, enabled: !auditMode });
+  const { centerOnNode, fitCanvas, focusNeighborhood, motion } = useWorkspaceViewport({ viewportRef, pendingFocus, layoutRevision, mode: canvasMode, follow: follow && !auditMode, currentId, selectedId, motionMode });
+  const { scene3d, sceneRef, openScene, closeScene, occlusion, exporting, exportImage } = useWorkspaceScene({ viewportRef, flatRef, inspectorRef, selectedId, mode: canvasMode, audit: auditMode, flash, enabled: !auditMode });
   // Resolve selection against the requested checkpoint, never its loading fallback.
   const { selected, focusNode, clearSelection, switchMode, handleNodesChange, onNodeClick } = useWorkspaceSelection({
     snapshot: timeline.active && !timeline.point ? null : snapshot,
     byId, projection, nodes, edges, mode, setMode, selectedId, setSelectedId,
-    deepLink, pendingFocus, centerOnNode, onNodesChange, closeSidebar, scene3d, revealInGeneral: !auditMode,
+    deepLink, pendingFocus, centerOnNode, onNodesChange, closeSidebar, scene3d,
+    revealInGeneral: !auditMode,
+    canvasActive: !auditMode || showAuditGraph,
   });
   // A bare host can navigate and restyle; only `reference=1` offers the explicit reference action,
   // and never over a checkpoint or a static export, where the canonical node may differ.
@@ -117,6 +124,7 @@ function Workspace() {
     },
   });
   const activeHoverId = hoveredNodeId && byId.has(hoveredNodeId) ? hoveredNodeId : null;
+  const activeChanges = showChanges && timeline.active ? timeline.changeMap : null;
   const { highlighted, displayNodes, displayEdges } = useWorkspacePresentation(
     nodes,
     edges,
@@ -124,8 +132,8 @@ function Workspace() {
     fresh,
     canvasMode,
     edgeStyle,
-    showChanges && timeline.active ? timeline.changeMap : null,
-    activeHoverId,
+    activeChanges,
+    exporting ? null : activeHoverId,
   );
   useEffect(() => { setHoveredNodeId(null); }, [workspace, canvasMode]);
   const hidden = projection?.hidden || 0;
@@ -142,42 +150,78 @@ function Workspace() {
     }
   } : undefined;
 
+  const toggleTheme = (origin?: { x: number; y: number }) => {
+    runViewTransition(() => setTheme(theme === 'light' ? 'dark' : 'light'), origin);
+  };
+  const changeThemeTo = (next: 'light' | 'dark', origin?: { x: number; y: number }) => {
+    if (next !== theme) runViewTransition(() => setTheme(next), origin);
+  };
+  const changeCardTheme = (next: CardTheme) => {
+    if (next !== cardTheme) runViewTransition(() => setCardTheme(next));
+  };
+  const switchAuditSurface = (next?: boolean) => {
+    const target = typeof next === 'boolean' ? next : !auditGraphOpen;
+    if (target !== auditGraphOpen) runViewTransition(() => setAuditGraphOpen(target));
+  };
+  const auditOcclusion = useSceneOcclusion(viewportRef, inspectorRef, auditMode && Boolean(selected));
+  const auditInspectorPad = selected
+    ? (auditOcclusion.right > 0 ? `${Math.round(auditOcclusion.right + 8)}px` : '400px')
+    : undefined;
+  const openAuditArgument = (node: BoardNode, parentIssueId?: string) => {
+    if (isAuditIssue(node)) {
+      navigateWorkspace({ issueId: node.id, candidateId: null, node: null });
+    } else if (parentIssueId !== undefined) {
+      navigateWorkspace({ issueId: parentIssueId, candidateId: node.id, node: null });
+    } else {
+      navigateWorkspace({ candidateId: node.id, node: null });
+    }
+    clearSelection();
+    if (window.innerWidth < 1024) closeSidebar();
+    pendingFocus.current = node.id;
+  };
+  const chooseIssue = (id: string | null) => {
+    if (id === null) setAuditGraphOpen(false);
+    navigateWorkspace({ issueId: id, candidateId: null, node: null });
+    clearSelection();
+    pendingFocus.current = id;
+  };
+  const chooseCandidate = (id: string | null) => {
+    const target = id ?? issueId;
+    navigateWorkspace({ candidateId: id, node: null });
+    clearSelection();
+    pendingFocus.current = target;
+  };
+  const auditCandidateList = audit ? (audit.issue ? audit.members : audit.candidates) : [];
+  const auditCandidateIdx = audit?.candidate ? auditCandidateList.findIndex((item) => item.id === audit.candidate?.id) : -1;
+  const stepAuditCandidate = (delta: 1 | -1) => {
+    if (!auditCandidateList.length) return;
+    if (auditCandidateIdx < 0) {
+      const target = delta > 0 ? auditCandidateList[0] : auditCandidateList[auditCandidateList.length - 1];
+      if (target) chooseCandidate(target.id);
+      return;
+    }
+    const next = auditCandidateList[auditCandidateIdx + delta];
+    if (next) chooseCandidate(next.id);
+  };
+
   useWorkspaceShortcuts(clearSelection, setPaletteOpen, setShortcutsOpen, setSidebarOpen, {
     enabled: Boolean(snapshot) && !scene3d && (!auditMode || showAuditGraph),
     onFit: fitCanvas,
     onLocate: !auditMode && currentId ? () => focusNode(currentId) : undefined,
     onNeighborhood: (!auditMode || showAuditGraph) ? triggerNeighborhood : undefined,
     onToggleMap: () => setShowMap((open) => !open),
+    auditEnabled: Boolean(snapshot && audit && auditMode),
+    onNextCandidate: () => stepAuditCandidate(1),
+    onPrevCandidate: () => stepAuditCandidate(-1),
+    onToggleAuditSurface: canShowAuditGraph ? () => switchAuditSurface() : undefined,
+    onToggleSettings: () => setSettingsOpen((open) => !open),
   });
-
-  const toggleTheme = (origin?: { x: number; y: number }) => {
-    runViewTransition(() => setTheme(theme === 'light' ? 'dark' : 'light'), origin);
-  };
-  const changeCardTheme = (next: CardTheme) => {
-    if (next !== cardTheme) runViewTransition(() => setCardTheme(next));
-  };
-  const openAuditArgument = (node: BoardNode) => {
-    navigateWorkspace(isAuditIssue(node) ? { issueId: node.id, candidateId: null, node: node.id } : { candidateId: node.id, node: node.id });
-    focusNode(node.id);
-    pendingFocus.current = node.id;
-  };
-  const chooseIssue = (id: string | null) => {
-    navigateWorkspace({ issueId: id, candidateId: null, node: id });
-    if (id) focusNode(id); else clearSelection();
-    pendingFocus.current = id;
-  };
-  const chooseCandidate = (id: string | null) => {
-    const target = id ?? issueId;
-    navigateWorkspace({ candidateId: id, node: target });
-    if (target) focusNode(target); else clearSelection();
-    pendingFocus.current = target;
-  };
 
   // A single authored issue should open immediately so the dossier is not an empty shell.
   useEffect(() => {
     if (!auditMode || !audit || issueId || candidateId || audit.issues.length !== 1) return;
     const sole = audit.issues[0];
-    navigateWorkspace({ issueId: sole.id, candidateId: null, node: sole.id });
+    navigateWorkspace({ issueId: sole.id, candidateId: null, node: selectedId ?? deepLink.current });
     pendingFocus.current = sole.id;
   }, [auditMode, audit, issueId, candidateId]);
 
@@ -225,11 +269,13 @@ function Workspace() {
         digestRef={digestTrigger}
         activities={activities}
         activityTotal={stats.activities || activities.length}
+        showEmptyActivity={showEmptyActivity}
         timelineOpen={timelineOpen}
         onTimeline={isStatic ? undefined : () => {
           if (timelineOpen) { timeline.pause(); setAsOf(null); }
           setTimelineOpen(!timelineOpen);
         }}
+        onSettings={() => setSettingsOpen(true)}
       />
 
       <div className="relative flex min-h-0 flex-1">
@@ -237,7 +283,28 @@ function Workspace() {
           <>
             <button className="absolute inset-0 z-20 bg-black/20 lg:hidden" aria-label={t('app.closeNav')} onClick={() => setSidebarOpen(false)} />
             <aside className="anim-sidebar-in z-30 w-64 shrink-0 border-r bg-background max-lg:absolute max-lg:inset-y-0 max-lg:left-0 max-lg:shadow-float">
-              {audit ? <AuditCatalog audit={audit} selectedId={selectedId} onSelect={focusNode} onIssue={chooseIssue} onCandidate={chooseCandidate} onCandidateIssue={(id) => navigateWorkspace({ issueId: id })} onOpenArgument={openAuditArgument} onExpand={expandAudit} onSearch={() => { setPaletteOpen(true); closeSidebar(); }} /> :
+              {audit ? (
+                <AuditCatalog
+                  audit={audit}
+                  selectedId={selectedId}
+                  onSelect={focusNode}
+                  onIssue={chooseIssue}
+                  onCandidate={chooseCandidate}
+                  onCandidateIssue={(id) => navigateWorkspace({ issueId: id })}
+                  onOpenArgument={openAuditArgument}
+                  onExpand={expandAudit}
+                  onSearch={() => { setPaletteOpen(true); closeSidebar(); }}
+                  filter={filter}
+                  onFilter={setFilter}
+                  filterOptions={filterOptions}
+                  results={results}
+                  counts={counts}
+                  onShortcuts={() => setShortcutsOpen(true)}
+                  provenanceMode={auditProvenanceMode}
+                  changes={activeChanges}
+                  fresh={fresh}
+                />
+              ) :
               <Sidebar
                 current={current}
                 goals={agent.goals}
@@ -259,19 +326,21 @@ function Workspace() {
           </>
         )}
 
-        <main ref={viewportRef} className="relative flex min-w-0 flex-1 flex-col" aria-label={auditMode ? t('audit.dossier') : t('app.canvas')}>
+        <main ref={viewportRef} className="relative flex min-w-0 flex-1 flex-col" aria-label={showAuditGraph ? t('audit.showGraph') : auditMode ? t('audit.dossier') : t('app.canvas')}>
           <div className="relative flex min-h-0 flex-1 flex-col">
-          {audit && (
-            <div
-              className={cn('min-h-0', showAuditGraph ? 'shrink-0 border-b' : 'flex-1')}
-              style={showAuditGraph ? { height: `${clampAuditSplit(auditSplit)}%` } : undefined}
-            >
+          {audit && !showAuditGraph && (
+            <div className="min-h-0 flex-1">
               <AuditDossier
                 audit={audit}
                 selected={selected}
                 graphOpen={auditGraphOpen}
-                onToggleGraph={() => setAuditGraphOpen((open) => !open)}
+                inspectorPadding={auditInspectorPad}
+                provenanceMode={auditProvenanceMode}
+                changes={activeChanges}
+                fresh={fresh}
+                onToggleGraph={switchAuditSurface}
                 onSelect={focusNode}
+                onClearSelection={clearSelection}
                 onIssue={chooseIssue}
                 onCandidate={chooseCandidate}
                 onOpenArgument={openAuditArgument}
@@ -279,9 +348,19 @@ function Workspace() {
               />
             </div>
           )}
-          {showAuditGraph && <AuditSplitDivider value={auditSplit} onChange={setAuditSplit} />}
+          {audit && showAuditGraph && (
+            <AuditBlueprintBar
+              audit={audit}
+              graphOpen={auditGraphOpen}
+              inspectorPadding={auditInspectorPad}
+              onToggleGraph={switchAuditSurface}
+              onIssue={chooseIssue}
+              onCandidate={chooseCandidate}
+            />
+          )}
           {(!auditMode || showAuditGraph) && (
           <div ref={flatRef} data-layout-transition={layoutTransition ? 'true' : undefined} className={cn('relative min-h-0', auditMode ? 'flex-1' : 'absolute inset-0')} inert={scene3d} aria-hidden={scene3d}>
+          <ExportingContext.Provider value={exporting}>
           <ReactFlow
             nodes={displayNodes}
             edges={displayEdges}
@@ -314,11 +393,15 @@ function Workspace() {
             fitView
             fitViewOptions={{ padding: .14, minZoom: .08, maxZoom: 1 }}
             onMove={(_, viewport) => {
-              viewportRef.current?.style.setProperty('--zoom', String(viewport.zoom));
-              setCanvasZoom((prev) => Math.abs(prev - viewport.zoom) > 0.04 ? viewport.zoom : prev);
+              if (viewport.zoom !== lastZoomRef.current) {
+                lastZoomRef.current = viewport.zoom;
+                viewportRef.current?.style.setProperty('--zoom', String(viewport.zoom));
+                const nextFar = viewport.zoom < 0.85;
+                setFarZoom((prev) => (prev === nextFar ? prev : nextFar));
+              }
             }}
             proOptions={{ hideAttribution: true }}
-            onlyRenderVisibleElements
+            onlyRenderVisibleElements={!exporting}
           >
             <Background id="minor" variant={BackgroundVariant.Dots} gap={20} size={1.05} />
             <Background id="major" variant={BackgroundVariant.Dots} gap={100} size={1.75} color="var(--line-strong)" />
@@ -327,7 +410,7 @@ function Workspace() {
               canFollow={!isStatic && !auditMode}
               canExport={Boolean(projection?.nodes.length) && nodes.length > 0 && !exporting}
               onExport={exportImage}
-              grouped={auditMode || canvasMode === 'all'}
+              grouped={canvasMode === 'all'}
               direction={direction}
               showMap={showMap}
               follow={follow}
@@ -340,16 +423,14 @@ function Workspace() {
               onToggleMap={() => setShowMap((open) => !open)}
               showLegend={showLegend}
               onToggleLegend={() => setShowLegend((open) => !open)}
-              edgeStyle={edgeStyle}
-              onEdgeStyle={setEdgeStyle}
-              cardTheme={cardTheme}
-              onCardTheme={changeCardTheme}
+              showZoomSlider={showZoomSlider}
+              onSettings={() => setSettingsOpen(true)}
               onScene3d={auditMode ? undefined : openScene}
             />
             {showMap && (
               <MiniMap<CanvasNode>
                 position="bottom-left"
-                style={{ marginBottom: 64 }}
+                className="mb-16! max-sm:mb-26!"
                 pannable
                 zoomable
                 nodeBorderRadius={4}
@@ -364,6 +445,7 @@ function Workspace() {
               />
             )}
           </ReactFlow>
+          </ExportingContext.Provider>
           </div>
           )}
 
@@ -398,7 +480,7 @@ function Workspace() {
             </Suspense>
           )}
 
-          {!auditMode && showLegend && nodes.length > 0 && <Legend types={legend.types} groups={legend.groups} onClose={() => setShowLegend(false)} />}
+          {(!auditMode || showAuditGraph) && showLegend && nodes.length > 0 && <Legend types={legend.types} groups={legend.groups} onClose={() => setShowLegend(false)} />}
 
           {!auditMode && projection && projection.nodes.length === 0 && (
             <EmptyBoard viewEmpty={allNodes.length > 0} isStatic={isStatic} onShowAll={() => switchMode('all')} />
@@ -417,6 +499,7 @@ function Workspace() {
             onShowAll={() => switchMode('all')}
             laying={laying}
             notice={notice}
+            offsetTop={auditMode}
           />
 
           <p className="sr-only" role="status" aria-live="polite">{selected ? t('app.selected', { type: typeLabelOf(selected.type), title: selected.title }) : ''}</p>
@@ -424,8 +507,9 @@ function Workspace() {
           <CanvasPeekCard
             node={activeHoverId && activeHoverId !== selectedId ? byId.get(activeHoverId) ?? null : null}
             degree={activeHoverId ? (nodes.find((node) => node.id === activeHoverId)?.data.degree ?? 0) : 0}
-            visible={!scene3d && (!auditMode || showAuditGraph) && canvasZoom < 0.85 && Boolean(activeHoverId && activeHoverId !== selectedId)}
+            visible={showPeekHud && !scene3d && (!auditMode || showAuditGraph) && farZoom && Boolean(activeHoverId && activeHoverId !== selectedId)}
             inspectorOpen={Boolean(selected)}
+            inspectorOffset={auditMode ? auditOcclusion.right : occlusion.right}
           />
 
           {selected && <Inspector panelRef={inspectorRef} node={selected} edges={allEdges} byId={byId} onClose={clearSelection} onFocus={focusNode} onFocusNeighborhood={(!auditMode || showAuditGraph) ? () => focusNeighborhood(selected.id, edges) : undefined} onCopyLink={copyNodeLink} linkCopied={linkCopied} reference={referenceEnabled ? { status: reference.status, message: reference.message, nodeId: reference.nodeId, onRequest: reference.request } : undefined} writable={writable} onReload={reload} isStatic={isStatic} connected={connection === 'live'} revision={syncedAt} />}
@@ -464,8 +548,33 @@ function Workspace() {
         onTheme={toggleTheme}
         onCardTheme={changeCardTheme}
         onCopyDigest={copyDigest}
-        onExport={projection?.nodes.length && nodes.length > 0 && !exporting ? exportImage : null}
+        onExport={(!auditMode || showAuditGraph) && projection?.nodes.length && nodes.length > 0 && !exporting ? exportImage : null}
         onShortcuts={() => setShortcutsOpen(true)}
+        onSettings={() => setSettingsOpen(true)}
+      />
+      <SettingsDialog
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        embedded={presentation.embedded}
+        theme={theme}
+        onTheme={changeThemeTo}
+        cardTheme={cardTheme}
+        onCardTheme={changeCardTheme}
+        edgeStyle={edgeStyle}
+        onEdgeStyle={setEdgeStyle}
+        showCardLoc={showCardLoc}
+        onShowCardLoc={setShowCardLoc}
+        showPeekHud={showPeekHud}
+        onShowPeekHud={setShowPeekHud}
+        showZoomSlider={showZoomSlider}
+        onShowZoomSlider={setShowZoomSlider}
+        auditProvenanceMode={auditProvenanceMode}
+        onAuditProvenanceMode={setAuditProvenanceMode}
+        showEmptyActivity={showEmptyActivity}
+        onShowEmptyActivity={setShowEmptyActivity}
+        motionMode={motionMode}
+        onMotionMode={setMotionMode}
+        onReset={resetPreferences}
       />
       <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
       <WriteRecovery writable={writable} />

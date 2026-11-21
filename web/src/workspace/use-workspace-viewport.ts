@@ -3,6 +3,7 @@ import { getNodesBounds, getViewportForBounds, useNodesInitialized, useReactFlow
 import { focusedIds, frameStrategy, pickFocus } from '../canvas-state';
 import { absolutePosition, NODE_H, NODE_W, type CanvasNode } from '../graph';
 import type { ViewMode } from '../types';
+import type { MotionMode } from '../view-transition';
 
 type Options = {
   viewportRef: RefObject<HTMLDivElement | null>;
@@ -12,21 +13,23 @@ type Options = {
   follow: boolean;
   currentId: string | null;
   selectedId: string | null;
+  motionMode?: MotionMode;
 };
 
 /** Framing and following move the reader's viewport, never the recorded agent cursor. */
-export function useWorkspaceViewport({ viewportRef, pendingFocus, layoutRevision, mode, follow, currentId, selectedId }: Options) {
+export function useWorkspaceViewport({ viewportRef, pendingFocus, layoutRevision, mode, follow, currentId, selectedId, motionMode = 'fluid' }: Options) {
   const initialized = useNodesInitialized();
   const { fitView, getNode, getNodes, setCenter, setViewport } = useReactFlow<CanvasNode>();
   const framedRevision = useRef(0);
   const lastCurrent = useRef<string | null>(null);
   const live = useRef({ follow: false, currentId: null as string | null, selectedId: null as string | null });
-  const [motion, setMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 350);
+  const [osReduced, setOsReduced] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const motion = osReduced || motionMode === 'reduced' ? 0 : 350;
   live.current = { follow: follow && mode !== 'all', currentId, selectedId };
 
   useEffect(() => {
     const preference = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const update = () => { setMotion(preference.matches ? 0 : 350); };
+    const update = () => { setOsReduced(preference.matches); };
     preference.addEventListener('change', update);
     return () => preference.removeEventListener('change', update);
   }, []);

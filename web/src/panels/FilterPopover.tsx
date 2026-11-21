@@ -30,7 +30,7 @@ export function FilterPopover({ filter, onChange, types, statuses, confidences, 
           {active && <i className="absolute right-1 top-1 size-1.5 rounded-full bg-foreground" />}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-72 p-3">
+      <PopoverContent align="start" collisionPadding={12} className="max-h-[min(440px,var(--radix-popover-content-available-height,80vh))] w-72 overflow-y-auto p-3">
         <Facet title={t('filter.type')}>
           {types.map((option) => (
             <Chip key={option.value} pressed={filter.types.includes(option.value)} onClick={() => onChange({ ...filter, types: toggle(filter.types, option.value) })}>

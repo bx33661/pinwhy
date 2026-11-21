@@ -22,6 +22,7 @@ type Options = {
   closeSidebar: () => void;
   scene3d: boolean;
   revealInGeneral?: boolean;
+  canvasActive?: boolean;
 };
 
 function asArrowKey(key: string): ArrowKey | null {
@@ -29,7 +30,7 @@ function asArrowKey(key: string): ArrowKey | null {
 }
 
 /** A single selection drives the inspector, URL and both canvases, including hidden-node reveal. */
-export function useWorkspaceSelection({ snapshot, byId, projection, nodes, edges, mode, setMode, selectedId, setSelectedId, deepLink, pendingFocus, centerOnNode, onNodesChange, closeSidebar, scene3d, revealInGeneral = true }: Options) {
+export function useWorkspaceSelection({ snapshot, byId, projection, nodes, edges, mode, setMode, selectedId, setSelectedId, deepLink, pendingFocus, centerOnNode, onNodesChange, closeSidebar, scene3d, revealInGeneral = true, canvasActive = true }: Options) {
   const focusFrame = useRef<number | null>(null);
   const keyboardFrame = useRef<number | null>(null);
   useEffect(() => () => {
@@ -101,6 +102,7 @@ export function useWorkspaceSelection({ snapshot, byId, projection, nodes, edges
 
   useEffect(() => {
     const onArrow = (event: KeyboardEvent) => {
+      if (!canvasActive) return;
       const arrowKey = asArrowKey(event.key);
       if (!selectedId || event.metaKey || event.ctrlKey || event.altKey || !arrowKey) return;
       const target = event.target instanceof Element ? event.target : null;

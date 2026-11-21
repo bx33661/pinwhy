@@ -20,7 +20,7 @@ const { detailLevel, groupFor, focusedIds, neighborInDirection, frameStrategy, p
 const { layoutOverview, project, layoutGraph, gridLayout, relationGroup, RELATION_GROUPS, RELATION_DASH, configureElk, placementFor } = await import(pathToFileURL(path.join(dir,'graph.js')).href);
 const { default: ELK } = await import('elkjs/lib/elk.bundled.js');
 configureElk(() => new ELK());
-const { roundedPath, routeValid } = await import(pathToFileURL(path.join(dir,'edge-route.js')).href);
+const { labelPoint, roundedPath, routeValid } = await import(pathToFileURL(path.join(dir,'edge-route.js')).href);
 const { routeAround } = await import(pathToFileURL(path.join(dir,'router.js')).href);
 const { parseDigest, parseNodeLine, parseRelationLine, parseTrail, parseCheckpoint, inlineRuns } = await import(pathToFileURL(path.join(dir,'digest-parse.js')).href);
 const { filterNodes, filterActive, EMPTY_FILTER } = await import(pathToFileURL(path.join(dir,'presentation.js')).href);
@@ -262,6 +262,16 @@ test('a clear line stays straight and a reversed pair loops around its own cards
  const pts=routeAround({x:788,y:64},'right',{x:0,y:64},'left',[left,right]);
  assert.ok(pts.length>=6);
  assert.ok(pts.every(p=>!(p.x>1&&p.x<287&&p.y>1&&p.y<127)&&!(p.x>501&&p.x<787&&p.y>1&&p.y<127)));
+});
+
+test('labelPoint keeps orthogonal step labels centered in the open channel and avoids tiny port stubs',()=>{
+ // Standard 4-point step route between x=288 and x=536 with midX=412 keeps x=412 even when vertical jog is small.
+ const centered = labelPoint([{x:288,y:0},{x:412,y:0},{x:412,y:16},{x:536,y:16}]);
+ assert.equal(centered.x, 412);
+ assert.equal(centered.y, 8);
+ // Degenerate ELK stub right next to start port (x=300, only 12px from x=288) falls back to the longest open segment.
+ const stub = labelPoint([{x:288,y:0},{x:300,y:0},{x:300,y:8},{x:520,y:8}]);
+ assert.equal(stub.x, 410);
 });
 
 const store = await import(pathToFileURL(path.join(root,'lib/store.js')).href);

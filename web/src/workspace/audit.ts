@@ -7,6 +7,22 @@ export const edgePeer = (edge: Pick<BoardEdge, 'from' | 'to'>, id: string) => (e
 
 export type ArgumentRole = 'support' | 'contradiction' | 'condition' | 'related';
 export type AuditNodeRole = ArgumentRole | 'root' | 'premise' | 'candidate' | 'localContradiction' | 'localCondition';
+export type AuditPostureKind = 'contested' | 'corroborated' | 'single' | 'converged' | 'neutral';
+export type AuditProvenance = {
+  proposer: string | null;
+  participants: string[];
+  crossSupported: boolean;
+  crossChallenged: boolean;
+  hasOpenDispute: boolean;
+  singleSource: boolean;
+  posture: AuditPostureKind;
+};
+
+export const recordActor = (record: { author?: unknown } | null | undefined): string | null =>
+  typeof record?.author === 'string' && record.author.trim() ? record.author.trim() : null;
+
+export const edgeActor = (edge: BoardEdge, byId: ReadonlyMap<string, BoardNode>, ownerId: string): string | null =>
+  recordActor(edge) ?? recordActor(byId.get(edgePeer(edge, ownerId)));
 export const AUDIT_BATCH = 12;
 const roles: ArgumentRole[] = ['support', 'contradiction', 'condition', 'related'];
 const membershipKinds: Record<string, true> = { answers: true, 'related-to': true, refines: true };
@@ -31,7 +47,92 @@ export type AuditIndex = {
   arguments: Map<string, Record<ArgumentRole, BoardEdge[]>>;
   issues: BoardNode[]; candidates: BoardNode[]; membership: Map<string, BoardNode[]>;
   reverseMembership: Map<string, BoardNode[]>; unassigned: BoardNode[];
+  actors: string[]; multiActor: boolean; provenance: Map<string, AuditProvenance>;
 };
+
+const RETIRED_AUDIT_STATUS = new Set(['dead', 'refuted', 'superseded']);
+
+function computeCandidateProvenance(
+  candidate: BoardNode,
+  byId: ReadonlyMap<string, BoardNode>,
+  argumentsByNode: ReadonlyMap<string, Record<ArgumentRole, BoardEdge[]>>,
+  multiActor: boolean,
+): AuditProvenance {
+  const proposer = recordActor(candidate);
+  const participantSet = new Set<string>();
+  if (proposer) participantSet.add(proposer);
+  const direct = argumentsByNode.get(candidate.id) ?? emptyGroups();
+  let crossSupported = false;
+  let crossChallenged = false;
+  let localDisputeCount = 0;
+
+  for (const edge of direct.support) {
+    const peerId = edgePeer(edge, candidate.id);
+    const peer = byId.get(peerId);
+    const actor = edgeActor(edge, byId, candidate.id);
+    if (actor) {
+      participantSet.add(actor);
+      if (proposer && actor !== proposer) crossSupported = true;
+    }
+    if (peer && !isAuditIssue(peer) && !isAuditCandidate(peer)) {
+      const local = argumentsByNode.get(peerId);
+      for (const pEdge of local?.support ?? []) {
+        if (edgePeer(pEdge, peerId) === candidate.id) continue;
+        const pActor = edgeActor(pEdge, byId, peerId);
+        if (pActor) {
+          participantSet.add(pActor);
+          if (proposer && pActor !== proposer) crossSupported = true;
+        }
+      }
+      for (const cEdge of local?.contradiction ?? []) {
+        localDisputeCount++;
+        const cActor = edgeActor(cEdge, byId, peerId);
+        if (cActor) {
+          participantSet.add(cActor);
+          if (proposer && cActor !== proposer) crossChallenged = true;
+        }
+      }
+    }
+  }
+
+  for (const edge of direct.contradiction) {
+    const actor = edgeActor(edge, byId, candidate.id);
+    if (actor) {
+      participantSet.add(actor);
+      if (proposer && actor !== proposer) crossChallenged = true;
+    }
+  }
+
+  for (const edge of direct.condition) {
+    const peerId = edgePeer(edge, candidate.id);
+    const actor = edgeActor(edge, byId, candidate.id);
+    if (actor) participantSet.add(actor);
+    for (const cEdge of argumentsByNode.get(peerId)?.contradiction ?? []) {
+      localDisputeCount++;
+      const cActor = edgeActor(cEdge, byId, peerId);
+      if (cActor) {
+        participantSet.add(cActor);
+        if (proposer && cActor !== proposer) crossChallenged = true;
+      }
+    }
+  }
+
+  const retired = Boolean(candidate.status && RETIRED_AUDIT_STATUS.has(candidate.status));
+  const hasOpenDispute = !retired && (direct.contradiction.length > 0 || localDisputeCount > 0);
+  const participants = [...participantSet];
+  const singleSource = multiActor && !retired && proposer !== null && participants.length === 1 && !crossSupported && !crossChallenged;
+  const posture: AuditPostureKind = retired
+    ? 'converged'
+    : hasOpenDispute
+      ? 'contested'
+      : crossSupported
+        ? 'corroborated'
+        : singleSource
+          ? 'single'
+          : 'neutral';
+
+  return { proposer, participants, crossSupported, crossChallenged, hasOpenDispute, singleSource, posture };
+}
 
 /** Built once per immutable snapshot, with no issue × candidate × edge scans. */
 export function buildAuditIndex(snapshot: GraphSnapshot): AuditIndex {
@@ -80,7 +181,22 @@ export function buildAuditIndex(snapshot: GraphSnapshot): AuditIndex {
     if (!ids.length) unassigned.push(candidate);
     for (const id of ids) membership.get(id)?.push(candidate);
   }
-  return { snapshot, nodes, byId, edges, nodeOrder, edgeOrder, adjacency, arguments: argumentsByNode, issues, candidates, membership, reverseMembership, unassigned };
+  const actorSet = new Set<string>();
+  for (const node of nodes) {
+    const actor = recordActor(node);
+    if (actor) actorSet.add(actor);
+  }
+  for (const edge of edges) {
+    const actor = recordActor(edge);
+    if (actor) actorSet.add(actor);
+  }
+  const actors = [...actorSet];
+  const multiActor = actors.length > 1;
+  const provenance = new Map<string, AuditProvenance>();
+  for (const candidate of candidates) {
+    provenance.set(candidate.id, computeCandidateProvenance(candidate, byId, argumentsByNode, multiActor));
+  }
+  return { snapshot, nodes, byId, edges, nodeOrder, edgeOrder, adjacency, arguments: argumentsByNode, issues, candidates, membership, reverseMembership, unassigned, actors, multiActor, provenance };
 }
 
 export type AuditExpansion = Record<string, number>;
@@ -102,12 +218,29 @@ export type AuditLocalContext = { node: BoardNode; groups: Record<ArgumentRole, 
 export type AuditSelection = {
   index: AuditIndex; issues: BoardNode[]; candidates: BoardNode[]; issue: BoardNode | null; candidate: BoardNode | null;
   root: BoardNode | null; members: BoardNode[]; groups: Record<ArgumentRole, BoardEdge[]>;
-  pages: Record<ArgumentRole, AuditPage<BoardEdge>>; premises: AuditPage<BoardEdge>;
+  pages: Record<ArgumentRole, AuditPage<BoardEdge>>; premises: AuditPage<BoardEdge>; premiseOwners: ReadonlyMap<string, string>;
   catalog: Record<'issues' | 'members' | 'candidateIssues' | 'unassigned' | 'records', AuditPage<BoardNode>>;
   contexts: Map<string, AuditLocalContext>; argumentEdges: Set<string>; nodeRoles: Map<string, AuditNodeRole[]>;
   outsideIssue: boolean; missingIssue: boolean; missingCandidate: boolean; candidateIssues: BoardNode[];
   unassigned: BoardNode[]; records: BoardNode[]; visibleIds: Set<string>; snapshot: GraphSnapshot;
 };
+
+/** Other candidates or issues that explicitly cite this evidence/condition record, in authored order. */
+export function sharedAuditReferences(index: AuditIndex, nodeId: string, excludeId: string | null, limit = 3): { items: BoardNode[]; remaining: number } {
+  const seen = new Set<string>();
+  const peers: BoardNode[] = [];
+  for (const edge of index.adjacency.get(nodeId) ?? []) {
+    const peerId = edgePeer(edge, nodeId);
+    if (peerId === nodeId || peerId === excludeId || seen.has(peerId)) continue;
+    const peer = index.byId.get(peerId);
+    if (!peer || (!isAuditCandidate(peer) && !isAuditIssue(peer))) continue;
+    if (argumentRole(edge, peerId) === 'related') continue;
+    seen.add(peerId);
+    peers.push(peer);
+  }
+  peers.sort((a, b) => (index.nodeOrder.get(a.id) ?? 0) - (index.nodeOrder.get(b.id) ?? 0));
+  return { items: peers.slice(0, limit), remaining: Math.max(0, peers.length - limit) };
+}
 
 type ResolvedAuditRoot = {
   issue: BoardNode | null; candidate: BoardNode | null; root: BoardNode | null;
@@ -351,7 +484,7 @@ export function selectAudit(index: AuditIndex, issueId: string | null, candidate
     .flatMap((id) => { const node = byId.get(id); return node ? [node] : []; });
 
   return {
-    index, issues, candidates, issue, candidate, root, members, groups, pages, premises: premiseState.premises, catalog,
+    index, issues, candidates, issue, candidate, root, members, groups, pages, premises: premiseState.premises, premiseOwners: premiseState.premiseOwners, catalog,
     contexts: graphState.contexts, argumentEdges: graphState.argumentEdges, nodeRoles: graphState.nodeRoles,
     outsideIssue, candidateIssues, missingIssue, missingCandidate, unassigned: index.unassigned, records: index.nodes, visibleIds,
     snapshot: { ...snapshot, nodes: visibleNodes, edges: [...graphState.localEdges.values()].sort((a, b) => (index.edgeOrder.get(a.id) ?? 0) - (index.edgeOrder.get(b.id) ?? 0)) },

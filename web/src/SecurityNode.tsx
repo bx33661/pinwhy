@@ -9,6 +9,7 @@ import type { CanvasNode } from './graph';
 import { typeLabel } from './graph';
 import { BaseNode } from './components/react-flow/base-node';
 import { detailLevel } from './canvas-state';
+import { useIsExporting } from './export-context';
 import { confidenceLabel, nodeStateSummary, presentNode, statusLabel } from './presentation';
 import { sourceLocation } from './research-state';
 import { SeverityBadge } from './SeverityBadge';
@@ -50,7 +51,9 @@ const handleClass = 'size-1! min-h-0! min-w-0! border-0! bg-transparent! opacity
 
 export const SecurityNode = memo(function SecurityNode({ data, selected }: NodeProps<CanvasNode>) {
   const { item, current, dimmed, direction, compact, muted, hoverMuted, hoverPeer, entering, enterOrder, fresh, agents, change, changeFields } = data;
-  const level = useStore((state) => detailLevel(state.transform[2]));
+  const exporting = useIsExporting();
+  const liveLevel = useStore((state) => detailLevel(state.transform[2]));
+  const level = exporting ? 'detail' : liveLevel;
   const vertical = direction === 'DOWN';
   const text = presentNode(item);
   const loc = sourceLocation(item);
@@ -67,7 +70,7 @@ export const SecurityNode = memo(function SecurityNode({ data, selected }: NodeP
       tabIndex={-1}
       style={{ '--c': `var(--node-${item.type in DOT_CLASS ? item.type : 'note'})`, '--enter-order': enterOrder ?? 0 } as CSSProperties}
       data-detail-level={level}
-      data-entering={entering ? 'true' : undefined}
+      data-entering={entering && !exporting ? 'true' : undefined}
       data-severe={severe && !retired ? 'true' : undefined}
       title={change === 'added' ? `${t('node.changeAdded')}\n${t('node.previewHint')}` : change === 'updated' ? `${t('node.changeUpdated', { fields: (changeFields || []).join(', ') })}\n${t('node.previewHint')}` : t('node.previewHint')}
       aria-label={`${typeLabel(item.type)}：${item.title}${state ? ` · ${state}` : ''}`}
@@ -140,7 +143,29 @@ export const SecurityNode = memo(function SecurityNode({ data, selected }: NodeP
           {item.severity && <SeverityBadge severity={item.severity} />}
         </header>
       )}
-      {data.auditRoles && <p className="relative m-0 truncate text-[11px] font-medium leading-4 text-muted-foreground" title={data.auditRoles.map((role) => t(`audit.${role}`)).join(' · ')}>{data.auditRoles.map((role) => t(`audit.${role}`)).join(' · ')}</p>}
+      {data.auditRoles && (
+        <p
+          className="relative m-0 inline-flex max-w-full items-center gap-1.5 truncate text-[11px] font-medium leading-4 text-muted-foreground"
+          title={data.auditRoles.map((role) => t(`audit.${role}`)).join(' · ')}
+        >
+          <i
+            aria-hidden="true"
+            className="size-1.5 shrink-0 rounded-full"
+            style={{
+              background: data.auditRoles.includes('root')
+                ? 'var(--ink)'
+                : data.auditRoles.includes('contradiction') || data.auditRoles.includes('localContradiction')
+                  ? 'var(--rel-oppose)'
+                  : data.auditRoles.includes('condition') || data.auditRoles.includes('localCondition')
+                    ? 'var(--rel-derive)'
+                    : data.auditRoles.includes('support') || data.auditRoles.includes('premise')
+                      ? 'var(--rel-support)'
+                      : 'var(--ink-3)',
+            }}
+          />
+          <span className="truncate">{data.auditRoles.map((role) => t(`audit.${role}`)).join(' · ')}</span>
+        </p>
+      )}
       {data.auditCounts && (data.auditCounts.contradiction > 0 || data.auditCounts.condition > 0) && <div className="relative flex flex-wrap gap-1 text-[11px] font-medium leading-4">
         {data.auditCounts.contradiction > 0 && <button type="button" data-audit-detail="contradiction" aria-label={`${item.title || item.id} · ${t('audit.hasContradictions')} · ${data.auditCounts.contradiction}`} className="nodrag nopan rounded border border-foreground/40 bg-background px-1.5 py-0.5 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring">{t('audit.hasContradictions')} · {data.auditCounts.contradiction}</button>}
         {data.auditCounts.condition > 0 && <button type="button" data-audit-detail="condition" aria-label={`${item.title || item.id} · ${t('audit.hasConditions')} · ${data.auditCounts.condition}`} className="nodrag nopan rounded border border-foreground/40 bg-background px-1.5 py-0.5 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring">{t('audit.hasConditions')} · {data.auditCounts.condition}</button>}
@@ -160,7 +185,7 @@ export const SecurityNode = memo(function SecurityNode({ data, selected }: NodeP
         <p className={cn('relative m-0 text-xs leading-[18px] text-muted-foreground', loc ? 'line-clamp-1' : 'line-clamp-2')}>{text.summary}</p>
       )}
       {level === 'detail' && !compact && loc && (
-        <p className="relative m-0 mt-auto truncate font-mono text-[10.5px] leading-4 text-muted-foreground/90" title={loc}>{loc}</p>
+        <p className="pinwhy-card-loc relative m-0 mt-auto truncate font-mono text-[10.5px] leading-4 text-muted-foreground/90" title={loc}>{loc}</p>
       )}
       <Handle type="source" position={vertical ? Position.Bottom : Position.Right} className={handleClass} />
     </BaseNode>

@@ -15,7 +15,7 @@ for (const file of ['types.js', 'workspace/audit.js']) {
   fs.writeFileSync(target, fs.readFileSync(target, 'utf8').replace(/from '(\.\.?\/[^']+)'/g, (_all, name) => `from '${name}.js'`));
 }
 fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ type: 'module' }));
-const { selectAudit, buildAuditIndex, argumentRole, changeAuditExpansion, AUDIT_BATCH } = await import(pathToFileURL(path.join(dir, 'workspace/audit.js')).href);
+const { selectAudit, buildAuditIndex, argumentRole, changeAuditExpansion, sharedAuditReferences, AUDIT_BATCH } = await import(pathToFileURL(path.join(dir, 'workspace/audit.js')).href);
 const node = (id, type, extra = {}) => ({ id, type, title: `Authored ${id}`, ...extra });
 const edge = (id, from, to, kind, extra = {}) => ({ id, from, to, kind, ...extra });
 const nodes = [node('q1', 'question'), node('q2', 'goal'), node('c1', 'finding'), node('c2', 'hypothesis'), node('c3', 'vuln'), node('f1', 'fact'), node('p1', 'fact'), node('condition', 'condition'), node('counter', 'result'), node('unrelated', 'fact'), node('custom', 'custom-record')];
@@ -341,4 +341,65 @@ test('unassigned catalogs stay paged and explicit condition cycles stop at close
   assert.equal(view.contexts.size, 2);
   assert.equal(view.groups.contradiction.length, 0);
   assert.equal(view.snapshot.edges.find((item) => item.id === 'cycle'), cyclic.edges.find((item) => item.id === 'cycle'));
+});
+
+test('premiseOwners map 2nd-hop premises to their direct support and sharedAuditReferences keep authored order', () => {
+  const sharedBoard = buildAuditIndex({
+    meta: {},
+    nodes: [
+      node('c1', 'finding'),
+      node('c2', 'vuln'),
+      node('c3', 'hypothesis'),
+      node('s1', 'fact'),
+      node('p1', 'observation'),
+      node('cond', 'condition'),
+    ],
+    edges: [
+      edge('e1', 's1', 'c1', 'supports'),
+      edge('e2', 'p1', 's1', 'supports'),
+      edge('e3', 'c1', 'cond', 'depends-on'),
+      edge('e4', 'c2', 'cond', 'depends-on'),
+      edge('e5', 'c3', 'cond', 'related-to'),
+    ],
+  });
+  const selected = selectAudit(sharedBoard, null, 'c1');
+  assert.equal(selected.premiseOwners.get('e2'), 's1');
+  const refs = sharedAuditReferences(sharedBoard, 'cond', 'c1');
+  assert.deepEqual(refs.items.map((item) => item.id), ['c2']);
+  assert.equal(refs.remaining, 0);
+});
+
+test('provenance derives single-source, corroborated and contested postures factually while staying silent on single-actor boards', () => {
+  const mono = buildAuditIndex({
+    meta: {},
+    nodes: [node('c1', 'finding', { author: 'agent:primary', status: 'open' }), node('f1', 'fact', { author: 'agent:primary' })],
+    edges: [edge('s1', 'f1', 'c1', 'supports', { author: 'agent:primary' })],
+  });
+  assert.equal(mono.multiActor, false);
+  assert.equal(mono.provenance.get('c1').singleSource, false);
+  assert.equal(mono.provenance.get('c1').posture, 'neutral');
+
+  const multi = buildAuditIndex({
+    meta: {},
+    nodes: [
+      node('solo', 'hypothesis', { author: 'agent:finder', status: 'open' }),
+      node('corroborated', 'finding', { author: 'agent:finder', status: 'confirmed' }),
+      node('contested', 'vuln', { author: 'agent:finder', status: 'open' }),
+      node('f-solo', 'fact', { author: 'agent:finder' }),
+      node('f-cross', 'result', { author: 'agent:skeptic' }),
+      node('f-stage', 'observation', { author: 'agent:finder' }),
+      node('r-local', 'result', { author: 'agent:skeptic' }),
+    ],
+    edges: [
+      edge('e1', 'f-solo', 'solo', 'supports', { author: 'agent:finder' }),
+      edge('e2', 'f-cross', 'corroborated', 'proves', { author: 'agent:skeptic' }),
+      edge('e3', 'f-stage', 'contested', 'supports', { author: 'agent:finder' }),
+      edge('e4', 'r-local', 'f-stage', 'contradicts', { author: 'agent:skeptic' }),
+    ],
+  });
+  assert.equal(multi.multiActor, true);
+  assert.equal(multi.provenance.get('solo').posture, 'single');
+  assert.equal(multi.provenance.get('corroborated').posture, 'corroborated');
+  assert.equal(multi.provenance.get('contested').posture, 'contested');
+  assert.equal(multi.provenance.get('contested').crossChallenged, true);
 });

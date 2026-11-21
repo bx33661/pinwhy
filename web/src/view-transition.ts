@@ -4,6 +4,15 @@ type DocWithVT = Document & {
   startViewTransition?: (cb: () => void) => { finished: Promise<unknown> };
 };
 
+export type MotionMode = 'fluid' | 'reduced';
+
+export function isMotionReduced(mode?: MotionMode): boolean {
+  if (mode === 'reduced') return true;
+  if (typeof document !== 'undefined' && document.documentElement.dataset.motion === 'reduced') return true;
+  if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return true;
+  return false;
+}
+
 /**
  * Run a DOM state update through the View Transition API when supported and motion is enabled.
  * Providing pointer origin triggers a circular reveal expanding from the toggle button.
@@ -12,7 +21,7 @@ export function runViewTransition(apply: () => void, origin?: { x: number; y: nu
   if (
     typeof document === 'undefined'
     || typeof window === 'undefined'
-    || window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    || isMotionReduced()
     || typeof (document as DocWithVT).startViewTransition !== 'function'
   ) {
     apply();

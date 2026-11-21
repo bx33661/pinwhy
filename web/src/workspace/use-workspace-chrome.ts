@@ -3,6 +3,9 @@ import type { EdgeStyle } from '../graph';
 import { DEFAULT_CARD_THEME, parseCardTheme, type CardTheme } from '../card-themes';
 import { applyEmbedFonts, NO_FONTS, type EmbedAppearance, type EmbedFonts } from '../embedded';
 import { usePref } from '../use-pref';
+import type { MotionMode } from '../view-transition';
+
+export type AuditProvenanceMode = 'auto' | 'always' | 'off';
 
 const THEME_KEY = 'pinwhy-theme-v3';
 const CARD_THEME_KEY = 'pinwhy-card-theme';
@@ -39,21 +42,37 @@ export function useWorkspaceChrome({ embedded = false, appearance = null, fonts:
   const [direction, setDirection] = usePref<'RIGHT' | 'DOWN'>('direction', 'RIGHT');
   // An embed usually sits in a narrow panel: the nav would eat the board, so it starts closed and the reader opens it.
   const [sidebarOpen, setSidebarOpen] = useState(() => !embedded && window.matchMedia('(min-width: 1024px)').matches);
+  useEffect(() => {
+    if (embedded) return;
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const onChange = (event: MediaQueryListEvent) => { setSidebarOpen(event.matches); };
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, [embedded]);
   const [showMap, setShowMap] = usePref('minimap', false);
   const [showLegend, setShowLegend] = usePref('legend-open', false);
   const [edgeStyle, setEdgeStyle] = usePref<EdgeStyle>('edge-style', 'curve');
   const [follow, setFollow] = usePref('follow', false);
   const [showChanges, setShowChanges] = usePref('timeline-changes', true);
+  const [motionMode, setMotionMode] = usePref<MotionMode>('motion-mode', 'fluid');
+  const [showCardLoc, setShowCardLoc] = usePref('card-loc', true);
+  const [showPeekHud, setShowPeekHud] = usePref('peek-hud', true);
+  const [showZoomSlider, setShowZoomSlider] = usePref('zoom-slider', false);
+  const [auditProvenanceMode, setAuditProvenanceMode] = usePref<AuditProvenanceMode>('audit-provenance', 'auto');
+  const [showEmptyActivity, setShowEmptyActivity] = usePref('show-empty-activity', false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [digestOpen, setDigestOpen] = useState(false);
   const [newOpen, setNewOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const closeSidebar = useCallback(() => { setSidebarOpen(false); }, []);
 
-  // Paint the theme and type scale before the first frame so a framed board matches its host immediately.
+  // Paint the theme, density attributes and type scale before the first frame.
   useLayoutEffect(() => {
     document.documentElement.dataset.theme = theme;
     document.documentElement.dataset.cardTheme = cardTheme;
+    document.documentElement.dataset.motion = motionMode === 'reduced' ? 'reduced' : 'fluid';
+    document.documentElement.dataset.cardLoc = showCardLoc ? 'show' : 'hide';
     if (embedded) {
       applyEmbedFonts(fonts);
       // The host owns appearance while embedded; writing here would overwrite the reader's standalone choice.
@@ -63,7 +82,21 @@ export function useWorkspaceChrome({ embedded = false, appearance = null, fonts:
       localStorage.setItem(THEME_KEY, theme);
       localStorage.setItem(CARD_THEME_KEY, cardTheme);
     } catch { /* ignore */ }
-  }, [theme, cardTheme, fonts, embedded]);
+  }, [theme, cardTheme, motionMode, showCardLoc, fonts, embedded]);
+
+  const resetPreferences = useCallback(() => {
+    if (!embedded) {
+      setTheme(systemTheme());
+      setCardTheme(DEFAULT_CARD_THEME);
+    }
+    setEdgeStyle('curve');
+    setMotionMode('fluid');
+    setShowCardLoc(true);
+    setShowPeekHud(true);
+    setShowZoomSlider(false);
+    setAuditProvenanceMode('auto');
+    setShowEmptyActivity(false);
+  }, [embedded, setEdgeStyle, setMotionMode, setShowCardLoc, setShowPeekHud, setShowZoomSlider, setAuditProvenanceMode, setShowEmptyActivity]);
 
   // A host message is partial: it never clears settings it does not mention.
   const applyFonts = useCallback((update: EmbedFonts) => {
@@ -78,8 +111,12 @@ export function useWorkspaceChrome({ embedded = false, appearance = null, fonts:
   return {
     theme, setTheme, cardTheme, setCardTheme, fonts, setFonts: applyFonts, direction, setDirection, sidebarOpen, setSidebarOpen, closeSidebar,
     showMap, setShowMap, showLegend, setShowLegend, edgeStyle, setEdgeStyle, follow, setFollow,
-    showChanges, setShowChanges, paletteOpen, setPaletteOpen, digestOpen, setDigestOpen,
-    newOpen, setNewOpen, shortcutsOpen, setShortcutsOpen,
+    showChanges, setShowChanges, motionMode, setMotionMode, showCardLoc, setShowCardLoc,
+    showPeekHud, setShowPeekHud, showZoomSlider, setShowZoomSlider,
+    auditProvenanceMode, setAuditProvenanceMode, showEmptyActivity, setShowEmptyActivity,
+    resetPreferences,
+    paletteOpen, setPaletteOpen, digestOpen, setDigestOpen,
+    newOpen, setNewOpen, shortcutsOpen, setShortcutsOpen, settingsOpen, setSettingsOpen,
   };
 }
 
@@ -90,23 +127,31 @@ type CanvasActions = {
   onLocate?: () => void;
   onNeighborhood?: () => void;
   onToggleMap: () => void;
+  auditEnabled?: boolean;
+  onNextCandidate?: () => void;
+  onPrevCandidate?: () => void;
+  onToggleAuditSurface?: () => void;
+  onToggleSettings?: () => void;
 };
 
-/** Canvas shortcuts respect editors, dialogs and menus. */
+/** Canvas and audit shortcuts respect editors, dialogs and menus. */
 export function useWorkspaceShortcuts(clearSelection: () => void, setPaletteOpen: Toggle, setShortcutsOpen: Toggle, setSidebarOpen: Toggle, canvasActions?: CanvasActions) {
   const actionsRef = useRef(canvasActions);
   actionsRef.current = canvasActions;
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+      const actions = actionsRef.current;
+      if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === 'k') {
         event.preventDefault();
         setPaletteOpen((open) => !open);
+      } else if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key === ',' && actions?.onToggleSettings) {
+        event.preventDefault();
+        actions.onToggleSettings();
       } else if (
         !event.metaKey && !event.ctrlKey && !event.altKey && !event.repeat
         && !(event.target as HTMLElement | null)?.closest('input, textarea, select, [contenteditable]')
         && !document.querySelector('[role="dialog"], [role="menu"]')
       ) {
-        const actions = actionsRef.current;
         const lower = event.key.toLowerCase();
         if (event.key === '/' || event.key === '[' || event.key === '?') {
           event.preventDefault();
@@ -123,6 +168,15 @@ export function useWorkspaceShortcuts(clearSelection: () => void, setPaletteOpen
         } else if (actions?.enabled && lower === 'm') {
           event.preventDefault();
           actions.onToggleMap();
+        } else if (actions?.auditEnabled && lower === 'j' && actions.onNextCandidate) {
+          event.preventDefault();
+          actions.onNextCandidate();
+        } else if (actions?.auditEnabled && lower === 'k' && actions.onPrevCandidate) {
+          event.preventDefault();
+          actions.onPrevCandidate();
+        } else if (actions?.auditEnabled && lower === 'g' && actions.onToggleAuditSurface) {
+          event.preventDefault();
+          actions.onToggleAuditSurface();
         } else if (event.key === 'Escape') clearSelection();
       } else if (event.key === 'Escape' && !document.querySelector('[role="dialog"], [role="menu"]')) clearSelection();
     };

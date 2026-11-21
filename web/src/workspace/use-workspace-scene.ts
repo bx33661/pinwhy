@@ -14,12 +14,17 @@ type Options = {
   inspectorRef: RefObject<HTMLElement | null>;
   selectedId: string | null;
   mode: ViewMode;
+  audit?: boolean;
   flash: (message: string) => void;
   enabled?: boolean;
 };
 
+const waitForExportMount = () => new Promise<void>((resolve) => {
+  requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+});
+
 /** The sandbox shares layout and selection; only its presentation, focus and export differ. */
-export function useWorkspaceScene({ viewportRef, flatRef, inspectorRef, selectedId, mode, flash, enabled = true }: Options) {
+export function useWorkspaceScene({ viewportRef, flatRef, inspectorRef, selectedId, mode, audit = false, flash, enabled = true }: Options) {
   const [preferred3d, setScene3d] = usePref('scene3d', false);
   const scene3d = enabled && preferred3d;
   const [exporting, setExporting] = useState(false);
@@ -53,7 +58,10 @@ export function useWorkspaceScene({ viewportRef, flatRef, inspectorRef, selected
         if (!sceneRef.current) { flash(t('scene3d.loading')); return; }
         await sceneRef.current.exportImage();
       } else {
-        await exportCanvasPng(getNodesBounds(getNodes()), `pinwhy-${mode}-${new Date().toISOString().slice(0, 10)}.png`);
+        // Wait for React Flow to mount off-screen elements (`onlyRenderVisibleElements={!exporting}`) and full card detail.
+        await waitForExportMount();
+        const prefix = audit ? 'audit' : mode;
+        await exportCanvasPng(getNodesBounds(getNodes()), `pinwhy-${prefix}-${new Date().toISOString().slice(0, 10)}.png`);
       }
       flash(t('app.exported'));
     } catch { flash(t('app.exportFailed')); }

@@ -38,9 +38,27 @@ export function roundedPath(points: Pt[], radius: number): string {
   return `${path}L${fmt(last.x)},${fmt(last.y)}`;
 }
 
-/** Midpoint of the middle segment, where the relation label sits. */
+/** Place the relation label in the open channel between endpoints, avoiding port stubs near cards. */
 export function labelPoint(points: Pt[]): Pt {
-  const i = Math.max(1, Math.floor(points.length / 2));
-  const a = points[i - 1], b = points[Math.min(i, points.length - 1)];
+  if (points.length < 2) return points[0] ?? { x: 0, y: 0 };
+  const start = points[0];
+  const end = points[points.length - 1];
+  const midIdx = Math.max(1, Math.floor(points.length / 2));
+  const ma = points[midIdx - 1];
+  const mb = points[Math.min(midIdx, points.length - 1)];
+  const mid = { x: (ma.x + mb.x) / 2, y: (ma.y + mb.y) / 2 };
+  if (Math.hypot(mid.x - start.x, mid.y - start.y) >= 40 && Math.hypot(end.x - mid.x, end.y - mid.y) >= 40) {
+    return mid;
+  }
+  let bestIdx = 1;
+  let bestLen = -1;
+  for (let i = 1; i < points.length; i++) {
+    const len = Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
+    if (len > bestLen) {
+      bestLen = len;
+      bestIdx = i;
+    }
+  }
+  const a = points[bestIdx - 1], b = points[bestIdx];
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
 }

@@ -548,6 +548,9 @@
     background: transparent;
     color: color-mix(in srgb, var(--c) 88%, var(--ink));
   }
+  :root[data-card-loc="hide"] .pinwhy-card-loc {
+    display: none;
+  }
 }
 
 @layer base {
@@ -678,6 +681,19 @@ html[data-vt="fade"]::view-transition-new(root) {
   html::view-transition-old(*),
   html::view-transition-new(*) { animation: none !important; }
 }
+:root[data-motion="reduced"] *,
+:root[data-motion="reduced"] *::before,
+:root[data-motion="reduced"] *::after {
+  transition-duration: 0s !important;
+  animation-duration: 0s !important;
+  animation-delay: 0s !important;
+}
+:root[data-motion="reduced"] .react-flow__edge-flow { display: none; }
+:root[data-motion="reduced"] .react-flow__node:hover .pinwhy-card,
+:root[data-motion="reduced"] .react-flow__node:active .pinwhy-card { transform: none !important; }
+html[data-motion="reduced"]::view-transition-group(*),
+html[data-motion="reduced"]::view-transition-old(*),
+html[data-motion="reduced"]::view-transition-new(*) { animation: none !important; }
 
 @keyframes pulse-ring {
   0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--live) 45%, transparent); }
@@ -695,9 +711,11 @@ html[data-vt="fade"]::view-transition-new(root) {
 @keyframes slide-up-bar { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes node-swap { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 @keyframes pill-in { from { opacity: 0; transform: translateY(-6px) scale(.96); } to { opacity: 1; transform: none; } }
-.anim-surface[data-state="open"] { animation: surface-in .14s ease-out; }
+@keyframes dossier-swap { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+@keyframes disclosure-in { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+.anim-surface[data-state="open"] { animation: surface-in .15s cubic-bezier(0.22, 1, 0.36, 1); }
 .anim-surface[data-state="closed"] { animation: surface-out .1s ease-in; }
-.anim-fade[data-state="open"] { animation: fade-in .14s ease-out; }
+.anim-fade[data-state="open"] { animation: fade-in .15s ease-out; }
 .anim-fade[data-state="closed"] { animation: fade-out .1s ease-in; }
 .anim-slide-in { animation: slide-in-right .18s cubic-bezier(0.22, 1, 0.36, 1); }
 .anim-sidebar-in { animation: slide-in-left .18s cubic-bezier(0.22, 1, 0.36, 1); }
@@ -705,6 +723,8 @@ html[data-vt="fade"]::view-transition-new(root) {
 .anim-node-swap { animation: node-swap .16s cubic-bezier(0.22, 1, 0.36, 1); }
 .anim-pill-in { animation: pill-in .18s cubic-bezier(0.22, 1, 0.36, 1); }
 .anim-peek-in { animation: pill-in .15s cubic-bezier(0.22, 1, 0.36, 1); }
+.anim-dossier-swap { animation: dossier-swap .17s cubic-bezier(0.22, 1, 0.36, 1); }
+.anim-disclosure-in { animation: disclosure-in .14s cubic-bezier(0.22, 1, 0.36, 1); }
 
 /* Nodes the Agent just wrote or changed. */
 @keyframes fresh-ring {

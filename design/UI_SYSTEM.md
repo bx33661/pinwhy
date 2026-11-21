@@ -4,11 +4,20 @@ Quiet tool chrome for exploration. General and security-audit modes are two read
 
 ## Layout
 
-- **Top bar (48px at 1024px and above)**: sidebar toggle · brand / task title · view
-  switch (现场 / 逻辑 / 全局) · Agent perspective · ⌘K · Agent activity · new node ·
-  digest · theme. Narrow screens use two compact rows. The Agent menu appears only
+- **Top bar (48px at 1024px and above)**: sidebar toggle · brand / task title · workspace &
+  view switch (现场 / 逻辑 / 全局) · Agent perspective · ⌘K (hidden at `lg:` while the sidebar's
+  search bar is already visible) · Agent activity (shown automatically when recorded activities
+  exist, or when explicitly enabled in Preferences) · timeline · new node · digest ·
+  preferences (`⌘,`) · theme. Narrow screens use two compact rows. The Agent menu appears only
   when there is more than one perspective; long names truncate in the trigger,
   with the full identity available in its tooltip and menu.
+- **Preferences (`⌘,`)**: a dedicated local reading-preferences dialog grouping Appearance &
+  Language (light/dark, interface language, 5 node card palettes: `clean`, `aura`, `mono`,
+  `morandi`, `classic`), Display & Density (edge routing `curve`/`step`/`straight`, audit
+  multi-actor provenance lens `auto`/`always`/`off`, canvas card source paths, zoomed-out hover
+  peek HUD, continuous zoom slider, empty-activity button), and Motion & Comfort (`fluid` vs
+  `reduced` motion, plus one-click reset). Preferences modify browser presentation only and
+  never write board events or overwrite standalone choices while embedded.
 - **About Pinwhy**: the brand mark and name open a centred dialog with the app
   icon, project introduction, available version/build/commit information, and Docs /
   GitHub links. Escape or the close button dismisses it and restores trigger focus.
@@ -34,11 +43,12 @@ Quiet tool chrome for exploration. General and security-audit modes are two read
   far-zoom node (`< 0.85`) surfaces a temporary bottom-right peek HUD card after a short dwell.
   Double-clicking a node (or pressing `Z`) frames its 1-hop neighborhood cleanly beside the
   Inspector, and detail zoom surfaces recorded source locations at card footers. One frosted
-  grouped floating toolbar (bottom-left) holds framing (`F`/`C`/`Z`), layout & expression (`M`
-  minimap with semantic node colors, selectable node card style across `clean`, `aura`, `mono`,
-  `morandi`, and `classic`), export, `2.5D`, and zoom controls. Light/dark and card-style
-  switches animate via the browser View Transition API when motion is enabled. At narrow widths
-  the zoom controls wrap together onto another row, keeping every button visible.
+  grouped floating toolbar (bottom-left) stays focused on spatial actions: framing (`F`/`C`/`Z`,
+  follow Agent), layout direction, legend, `M` minimap with semantic node colors, a quick
+  Preferences (`⌘,`) trigger, export, `2.5D`, and zoom controls (with an optional continuous
+  drag slider). Light/dark and card-style switches animate via the browser View Transition API
+  when motion is enabled. At narrow widths the zoom controls wrap together onto another row,
+  keeping every button visible.
 - **Inspector**: floats over the canvas right edge with frosted backdrop blur and a draggable
   desktop width handle (`340–560px`, persisted locally; bottom sheet on phones), so selecting a
   node never resizes or re-lays-out the canvas and cross-fades cleanly between selections. Metadata sits in a compact orthogonal grid, node IDs and source
@@ -56,9 +66,9 @@ Quiet tool chrome for exploration. General and security-audit modes are two read
 ## Workspace modes
 
 - A top-level General / Security audit selector is separate from the general Context / Logic / Global view switch. General remains the default. Reader mode, issue, candidate, selected node, Agent and checkpoint are navigation state, never board events.
-- General retains its canvas, 2.5D sandbox and existing controls. Security audit is a dedicated reading shell over the same board: a catalog of recorded questions/goals and candidates, plus an argument dossier (claim, support, counterevidence, required conditions) with role accents, semantic relation pills, and collapsible groups. When the optional local argument graph is opened below the dossier, a horizontal splitter resizes the vertical share cleanly (`28–76%`). Opening evidence does not silently replace the chosen issue or candidate.
+- General retains its canvas, 2.5D sandbox and existing controls. Security audit is a dedicated reading shell over the same board: a collapsible Issue ▸ Candidate tree outline with orthogonal certainty pills, dialectical `+support / −contradiction` micro-pulses and shared `FilterPopover` facets; a 3D orthogonal Candidate Matrix (`severity × confidence × status`, zero invented scores) when landing on all issues or an issue overview; and a Claim Specimen + Two-Wing Dialectical Balance dossier (`Supports & Tethered Premises` vs `Contradictions & Required Conditions`) when reading a candidate. Second-hop premises tether directly under the support record they back, local challenges/conditions unfold inline on the targeted evidence or condition card without being promoted to root counterevidence, desktop Inspector width reserves right-hand clearance so the opposing wing is never occluded, and a fluid `Dossier ⇄ Argument graph` switch opens a full-stage routed Toulmin blueprint over the same selection without splitting vertical height. Opening evidence does not silently replace the chosen issue or candidate.
 - Audit support, counterevidence, necessary conditions and related records are separate reading groups. Relation direction and authored explanation remain visible; a weak association or a failed experiment is not automatically counterevidence. Unknown relation kinds and unassigned/custom records stay reachable.
-- Shared evidence and conditions keep one node identity. Show their other references as navigation rather than copying records. Do not infer issue membership, source versions, AND/OR conditions or verdicts from prose or graph reachability.
+- Shared evidence and conditions keep one node identity. Show their other references as navigation rather than copying records. When more than one recorded `author` participates on a board, candidate rows and dossiers surface purely factual provenance cues (`Open dispute`, `Cross-verified`, `Single-source`) and an interactive participant spotlight without inventing confidence scores; single-author boards omit single-source and actor-spotlight chrome. Do not infer issue membership, source versions, AND/OR conditions or verdicts from prose or graph reachability.
 - Both modes use the same Inspector, explicit editing, conflict drafts, search, live snapshot and checkpoint history. Checkpoint and offline views are read-only; changing modes preserves that boundary. Audit content is included in the main bundle so standalone HTML can render it without a server.
 - At overview zoom, uncertainty remains visible alongside severity. A suspected candidate must not appear confirmed because its detail header disappeared. A support family label must not claim that every support relation proves its conclusion.
 - Evidence and condition cards expose counts of authored incoming contradictions and necessary dependencies. A counterargument to evidence stays attached to that evidence; it is not silently promoted to counterevidence against the root. Indicators describe records, never automatically invalidate or confirm a claim.
